@@ -143,6 +143,21 @@ function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
       {m(geo.path, look.path, true, 'footpaths')}
       {m(geo.tram, look.tram, true, 'tram')}
       </>}
+      {/* a lowered building keeps its original volume as a dotted black outline */}
+      {site.buildings.map((b, k) => {
+        if (!b.orig) return null
+        const [cx, cy] = centre(b.p)
+        const g = ground(cx, cy)
+        const top = g + b.orig
+        const now = g + b.h
+        const pts = []
+        for (let i = 0; i < b.p.length; i++) {
+          const [x1, y1] = b.p[i]
+          const [x2, y2] = b.p[(i + 1) % b.p.length]
+          pts.push([x1, top, -y1], [x2, top, -y2], [x1, now, -y1], [x1, top, -y1])
+        }
+        return <Line key={'ghost' + k} points={pts} segments color="#111111" lineWidth={1.6} dashed dashSize={0.45} gapSize={0.35} raycast={() => null} userData={{ noExport: true }} />
+      })}
       {selGeo && (
         <mesh geometry={selGeo} renderOrder={3} raycast={() => null} userData={{ noExport: true }}>
           <meshBasicMaterial color="#ff7a1a" transparent opacity={0.35} depthWrite={false} />

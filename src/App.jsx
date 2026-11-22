@@ -412,7 +412,7 @@ export default function App() {
   const LEVEL = 1.2
   const bcut = plan.bcut ?? {}
   const [bSel, setBSel] = useState(null)
-  const siteAdj = useMemo(() => site && { ...site, buildings: site.buildings.map((b, i) => (bcut[i] ? { ...b, h: Math.max(0.6, Math.round((b.h - bcut[i] * LEVEL) * 100) / 100) } : b)) }, [site, bcut])
+  const siteAdj = useMemo(() => site && { ...site, buildings: site.buildings.map((b, i) => (bcut[i] ? { ...b, h: Math.max(0.6, Math.round((b.h - bcut[i] * LEVEL) * 100) / 100), orig: b.h } : b)) }, [site, bcut])
   const maxCut = (i) => (site ? Math.max(0, Math.ceil((site.buildings[i].h - 0.6) / LEVEL) - 1) : 0)
   const cutBuilding = (i, steps) => {
     const n = Math.max(0, Math.min(maxCut(i), (bcut[i] ?? 0) + steps))
