@@ -103,8 +103,9 @@ function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
   // which building a click landed on (by its plan position)
   const pickAt = (e) => {
     if (passive || e.delta > 6 || !onPickBuilding) return
-    const x = e.point.x
-    const y = -e.point.z
+    // a little way into the building, so a click on a wall is inside its outline
+    const x = e.point.x + e.ray.direction.x * 0.3
+    const y = -(e.point.z + e.ray.direction.z * 0.3)
     const i = site.buildings.findIndex((b) => b.kind !== 'garage' && inside([x, y], b.p))
     if (i < 0) return
     e.stopPropagation()
