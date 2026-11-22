@@ -133,9 +133,7 @@ export function buildPlaza(plaza, site) {
   const mullions = []
   const fascia = []
   if (plaza.commerce)
-    for (const i of COMMERCE) {
-      const b = site.buildings[i]
-      if (!b) continue
+    for (const b of site.buildings.filter((b, j) => (COMMERCE.includes(j) && !b.hidden) || (COMMERCE.includes(b.partOf) && !b.gone))) {
       const p = b.p
       const cx = p.reduce((a, q) => a + q[0], 0) / p.length
       const cy = p.reduce((a, q) => a + q[1], 0) / p.length

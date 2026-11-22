@@ -19,7 +19,7 @@ const PICK = new THREE.Color('#ff7a1a')
 const dummy = new THREE.Object3D()
 const tint = new THREE.Color()
 
-export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreate, drawing, buildings }) {
+export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreate, drawing, buildings, cutting }) {
   const { controls } = useThree()
   const plates = useRef()
   const posts = useRef()
@@ -135,7 +135,7 @@ export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreat
         receiveShadow
         userData={{ layer: 'Lifted plates (reused GDR panels)', stack: true }}
         onPointerDown={(e) => {
-          if (e.instanceId == null || !built.plates[e.instanceId]) return
+          if (cutting || e.instanceId == null || !built.plates[e.instanceId]) return
           e.stopPropagation()
           const id = built.plates[e.instanceId][7]
           if (id !== sel) return onSel(id)
@@ -163,7 +163,7 @@ export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreat
           move.current = null
           release(e)
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => !cutting && e.stopPropagation()}
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
         onPointerOut={() => (document.body.style.cursor = '')}
       >

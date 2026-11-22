@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, OrthographicCamera, PerspectiveCamera } from '@react-three/drei'
 import { CLIP, CameraRig, SectionCut } from './Views.jsx'
@@ -69,10 +69,10 @@ function ribbon(lines, width, y) {
 }
 
 // Streets, paths, green and the surrounding buildings. The mapped garages of the site are left out: our boxes replace them.
-function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
+function Context({ site, look, topo, onPickBuilding, bSel, bPart, passive }) {
   const geo = useMemo(() => {
     const build = (test) => {
-      const list = site.buildings.filter(test).map((b) => seatBuilding(prism(b.p, b.h), b.p, b.h))
+      const list = site.buildings.filter((b) => test(b) && !b.hidden && !b.gone).map((b) => seatBuilding(prism(b.p, b.h), b.p, b.h))
       return list.length ? mergeGeometries(list) : null
     }
     const area = (kind, y) => {
@@ -106,13 +106,16 @@ function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
     // a little way into the building, so a click on a wall is inside its outline
     const x = e.point.x + e.ray.direction.x * 0.3
     const y = -(e.point.z + e.ray.direction.z * 0.3)
-    const i = site.buildings.findIndex((b) => b.kind !== 'garage' && inside([x, y], b.p))
+    const i = site.buildings.findIndex((b) => b.kind !== 'garage' && !b.hidden && !b.gone && inside([x, y], b.p))
     if (i < 0) return
     e.stopPropagation()
-    onPickBuilding(i)
+    const b = site.buildings[i]
+    if (b.partOf != null) onPickBuilding(b.partOf, b.part)
+    else onPickBuilding(i, null)
   }
-  const sel = bSel != null ? site.buildings[bSel] : null
-  const selGeo = useMemo(() => (sel ? seatBuilding(prism(sel.p, sel.h + 0.05), sel.p, sel.h + 0.05) : null), [sel, topo]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the picked building (or the picked part of a cut building, or all its parts)
+  const selList = bSel == null ? [] : site.buildings.filter((b, j) => !b.gone && (b.partOf === bSel ? bPart == null || b.part === bPart : j === bSel && !b.hidden && bPart == null))
+  const selGeo = useMemo(() => (selList.length ? mergeGeometries(selList.map((s) => seatBuilding(prism(s.p, s.h + 0.05), s.p, s.h + 0.05))) : null), [site, bSel, bPart, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   const m = (g, color, double, layer) =>
     g && (
       <mesh geometry={g} receiveShadow castShadow={double === 'cast' && look.shadows} userData={{ layer: `Context - ${layer}` }} onClick={double === 'cast' ? pickAt : undefined}>
@@ -145,7 +148,7 @@ function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
       </>}
       {/* a lowered building keeps its original volume as a dotted black outline */}
       {site.buildings.map((b, k) => {
-        if (!b.orig) return null
+        if (!b.orig || b.hidden || b.gone) return null
         const [cx, cy] = centre(b.p)
         const g = ground(cx, cy)
         const top = g + b.orig
@@ -157,6 +160,20 @@ function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
           pts.push([x1, top, -y1], [x2, top, -y2], [x1, now, -y1], [x1, top, -y1])
         }
         return <Line key={'ghost' + k} points={pts} segments color="#111111" lineWidth={1.6} dashed dashSize={0.45} gapSize={0.35} raycast={() => null} userData={{ noExport: true }} />
+      })}
+      {/* a removed or moved part of a cut building: its old place as a dotted black volume */}
+      {site.buildings.map((b, k) => {
+        if (!(b.gone || b.moved)) return null
+        const [cx, cy] = centre(b.home)
+        const g = ground(cx, cy)
+        const top = g + (b.orig ?? b.h)
+        const pts = []
+        for (let i = 0; i < b.home.length; i++) {
+          const [x1, y1] = b.home[i]
+          const [x2, y2] = b.home[(i + 1) % b.home.length]
+          pts.push([x1, top, -y1], [x2, top, -y2], [x1, g, -y1], [x2, g, -y2], [x1, g, -y1], [x1, top, -y1])
+        }
+        return <Line key={'was' + k} points={pts} segments color="#111111" lineWidth={1.6} dashed dashSize={0.45} gapSize={0.35} raycast={() => null} userData={{ noExport: true }} />
       })}
       {selGeo && (
         <mesh geometry={selGeo} renderOrder={3} raycast={() => null} userData={{ noExport: true }}>
@@ -405,6 +422,109 @@ function useItems({ title, block, picked, show, glabel, items, tags, chosen, act
   }, [title, block, picked, show, glabel, items, tags, chosen, active, pass, topo])
 }
 
+// The cut tool: click a first point and a second point; the line between them cuts (the park, or a building)
+function CutTool({ onCut }) {
+  const [a, setA] = useState(null)
+  const [b, setB] = useState(null)
+  // the first thing the pointer meets: the deck, a roof, the ground
+  const pt = (e) => {
+    const f = e.intersections.find((x) => x.object.userData.layer !== undefined) ?? e
+    return [f.point.x, -f.point.z, f.point.y]
+  }
+  return (
+    <group userData={{ noExport: true }}>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -50, 0]}
+        onClick={(e) => {
+          if (e.delta > 6) return
+          e.stopPropagation()
+          const p = pt(e)
+          if (!a) {
+            setA(p)
+            setB(p)
+          } else {
+            onCut([a[0], a[1]], [p[0], p[1]])
+            setA(null)
+            setB(null)
+          }
+        }}
+        onPointerMove={(e) => a && setB(pt(e))}
+        onPointerOver={() => (document.body.style.cursor = 'crosshair')}
+        onPointerOut={() => (document.body.style.cursor = '')}
+      >
+        <planeGeometry args={[3000, 3000]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {a && (
+        <>
+          <Line points={[[a[0], a[2] + 0.4, -a[1]], [b[0], Math.max(a[2], b[2]) + 0.4, -b[1]]]} color="#d2361f" lineWidth={3} dashed dashSize={0.6} gapSize={0.3} raycast={() => null} />
+          <mesh position={[a[0], a[2] + 0.4, -a[1]]} renderOrder={9} raycast={() => null}>
+            <sphereGeometry args={[0.45, 12, 8]} />
+            <meshBasicMaterial color="#d2361f" depthTest={false} />
+          </mesh>
+        </>
+      )}
+    </group>
+  )
+}
+
+// A blue handle on top of the picked part of a cut building: drag it to move the part, in steps of 1.20 m along the plate grid
+function PartMover({ site, bSel, bPart, onMove, deg }) {
+  const { controls, camera } = useThree()
+  const b = site.buildings.find((q) => q.partOf === bSel && q.part === bPart && !q.gone)
+  const ref = useRef()
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
+  const hit = useMemo(() => new THREE.Vector3(), [])
+  const drag = useRef(null)
+  useFrame(() => {
+    if (ref.current) ref.current.scale.setScalar(camera.isOrthographicCamera ? 14 / camera.zoom : camera.position.distanceTo(ref.current.position) * 0.022)
+  })
+  if (!b) return null
+  const [cx, cy] = centre(b.p)
+  const z = ground(cx, cy) + b.h + 1.5
+  const a = (deg * Math.PI) / 180
+  return (
+    <mesh
+      ref={ref}
+      position={[cx, z, -cy]}
+      renderOrder={9}
+      userData={{ noExport: true }}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        plane.constant = -z
+        if (!e.ray.intersectPlane(plane, hit)) return
+        drag.current = { start: [hit.x, -hit.z], dx: (b.p[0][0] - b.home[0][0]), dy: (b.p[0][1] - b.home[0][1]) }
+        e.target.setPointerCapture(e.pointerId)
+        if (controls) controls.enabled = false
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (!d) return
+        e.stopPropagation()
+        plane.constant = -z
+        if (!e.ray.intersectPlane(plane, hit)) return
+        const mx = hit.x - d.start[0]
+        const my = -hit.z - d.start[1]
+        // snap the move to whole plates along and across the grid
+        const u = Math.round((mx * Math.cos(a) + my * Math.sin(a)) / 1.2) * 1.2
+        const v = Math.round((-mx * Math.sin(a) + my * Math.cos(a)) / 1.2) * 1.2
+        onMove(bSel, bPart, Math.round((d.dx + u * Math.cos(a) - v * Math.sin(a)) * 100) / 100, Math.round((d.dy + u * Math.sin(a) + v * Math.cos(a)) * 100) / 100)
+      }}
+      onPointerUp={(e) => {
+        drag.current = null
+        e.target.releasePointerCapture?.(e.pointerId)
+        if (controls) controls.enabled = true
+      }}
+      onPointerOver={() => (document.body.style.cursor = 'move')}
+      onPointerOut={() => (document.body.style.cursor = '')}
+    >
+      <octahedronGeometry args={[0.7]} />
+      <meshBasicMaterial color="#3a7bd5" depthTest={false} />
+    </mesh>
+  )
+}
+
 // The magic wand: click the ground to add a point (Ctrl-click puts it into the nearest part of the line),
 // drag a point to move it, Shift-click a point to take it out. The cobalt band shows the ribbon it will make.
 const WAND_DOT = new THREE.SphereGeometry(1, 16, 10)
@@ -510,7 +630,7 @@ function Wand({ wand, onWand }) {
   )
 }
 
-export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings, roofs = {}, roofColour = '#c0392b', onPickBuilding, bSel }) {
+export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings, roofs = {}, roofColour = '#c0392b', onPickBuilding, bSel, bPart, cutMode, onCut, onPartMove, gridDeg = 11 }) {
   const built = useMemo(() => (ribbon.on ? buildRibbon(ribbon, undefined, ground) : null), [ribbon, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // the ribbons you drew with the magic wand, each along its own line
   const builtDrawn = useMemo(() => drawn.map((d) => ({ d, built: buildRibbon(d, d.route, ground) })), [drawn, topo]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -521,7 +641,7 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
     return out
   }, [built, builtDrawn, ribbon.pieces])
   const tags = useItems({ title, block, picked, show, glabel, items, tags: allTags, chosen, active, pass, topo })
-  const passive = !!connect || !!wand || !!placing || !!liftDraw
+  const passive = !!connect || !!wand || !!placing || !!liftDraw || !!cutMode
   const refs = useRef([])
   const down = useRef([0, 0])
   return (
@@ -564,7 +684,9 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
           shadow-bias={-0.0006}
           shadow-normalBias={0.05}
         />
-        <Context site={site} look={look} topo={topo} onPickBuilding={onPickBuilding} bSel={bSel} passive={passive || !!parkEdit || !!plazaEdit} />
+        <Context site={site} look={look} topo={topo} onPickBuilding={onPickBuilding} bSel={bSel} bPart={bPart} passive={passive || !!parkEdit || !!plazaEdit} />
+        {cutMode && <CutTool onCut={onCut} />}
+        {bSel != null && bPart != null && !cutMode && <PartMover site={site} bSel={bSel} bPart={bPart} onMove={onPartMove} deg={gridDeg} />}
         <Garages title={title} block={block} picked={picked} onPick={onPick} connecting={passive} pass={pass} look={look} topo={topo} roofs={roofs} />
         <Roofs roofs={roofs} title={title} picked={picked} onPick={onPick} connecting={passive} look={look} colour={roofColour} topo={topo} />
         {pass && <Passages pass={pass} look={look} topo={topo} />}
@@ -573,9 +695,9 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
           <Ribbon key={d.id} built={b} rib={d} layer={`Ribbon - ${d.name}`} chosen={active === d.id ? chosen : []} onPickPiece={(i, add) => onPickPiece(i, add, d.id)} connecting={passive} />
         ))}
         {wand && <Wand wand={wand} onWand={onWand} />}
-        {liftsBuilt && <Lifts built={liftsBuilt} lifts={lifts} deg={park?.netAngle ?? 11} sel={liftSel} onSel={onLiftSel} onChange={onLifts} onCreate={onLiftCreate} drawing={liftDraw} buildings={buildings} />}
+        {liftsBuilt && <Lifts cutting={!!cutMode} built={liftsBuilt} lifts={lifts} deg={park?.netAngle ?? 11} sel={liftSel} onSel={onLiftSel} onChange={onLifts} onCreate={onLiftCreate} drawing={liftDraw} buildings={buildings} />}
         {plaza?.on && <Plaza plaza={plaza} built={plazaBuilt} edit={plazaEdit} onChange={onPlaza} />}
-        {park?.on && <Park park={park} built={parkBuilt} edit={parkEdit} sel={parkSel} onSel={onParkSel} onChange={onPark} placing={placing} onPlace={onPlace} onPick={onPickPark} />}
+        {park?.on && <Park cutting={!!cutMode} park={park} built={parkBuilt} edit={parkEdit} sel={parkSel} onSel={onParkSel} onChange={onPark} placing={placing} onPlace={onPlace} onPick={onPickPark} />}
         <Elements items={items} picked={picked} onSelect={onSelectItem} onMove={onMoveItem} snap={snap} connecting={passive} locked={locked} layerName={layerName} />
         <ConnectDots connect={connect} items={items} onGrip={onGrip} onTarget={onTarget} />
         <ViewApi api={api} />

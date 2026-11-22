@@ -5,7 +5,7 @@ import { TITLES, TITLE } from './titles.js'
 import { ELEMENT_GROUPS, KINDS, alignRot, dims, placeByGrip, snapPoint } from './elements.js'
 import { MAP_STYLES, MAP_STYLE_IDS } from './mapStyles.js'
 import { TOPO_MODES, ground, setTerrain, setTopo } from './terrain.js'
-import { DEFAULT_PARK, buildPark, cleanPark, newParkId, prepBuildings, roofAt } from './park.js'
+import { DEFAULT_PARK, buildPark, cleanPark, cutOutlines, cutRing, newParkId, prepBuildings, ringArea, roofAt } from './park.js'
 import { DEFAULT_PLAZA, buildPlaza, cleanPlaza } from './plaza.js'
 import { DEFAULT_LIFTS, PLATE, buildLifts, cleanLifts } from './lifts.js'
 import { ROOF_MODES } from './Roofs.jsx'
@@ -119,6 +119,7 @@ function clean(s) {
     park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS,
     roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open'].includes(m))) : DEFAULT_ROOFS,
     roofColour: parseColour(s.roofColour) ?? '#c0392b',
+    bparts: Object.fromEntries(Object.entries(s.bparts ?? {}).filter(([i, ps]) => Number.isInteger(+i) && Array.isArray(ps) && ps.length).map(([i, ps]) => [i, ps.filter((q) => q && Array.isArray(q.p) && q.p.length >= 3).map((q) => ({ p: q.p.map(([x, y]) => [+x, +y]), ...(+q.dx ? { dx: +q.dx } : {}), ...(+q.dy ? { dy: +q.dy } : {}), ...(q.gone ? { gone: true } : {}) }))])),
     bcut: Object.fromEntries(Object.entries(s.bcut ?? {}).filter(([i, n]) => Number.isInteger(+i) && Number.isInteger(+n) && +n > 0).map(([i, n]) => [i, +n])), ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
 }
 function cleanLayers(list) {
@@ -412,7 +413,64 @@ export default function App() {
   const LEVEL = 1.2
   const bcut = plan.bcut ?? {}
   const [bSel, setBSel] = useState(null)
-  const siteAdj = useMemo(() => site && { ...site, buildings: site.buildings.map((b, i) => (bcut[i] ? { ...b, h: Math.max(0.6, Math.round((b.h - bcut[i] * LEVEL) * 100) / 100), orig: b.h } : b)) }, [site, bcut])
+  const [bPart, setBPart] = useState(null)
+  // cut buildings: plan.bparts = { building number: [{ p: outline where it was cut, dx, dy (moved), gone (removed) }] }
+  const bparts = plan.bparts ?? {}
+  const siteAdj = useMemo(() => {
+    if (!site) return site
+    const bs = site.buildings.map((b, i) => (bcut[i] ? { ...b, h: Math.max(0.6, Math.round((b.h - bcut[i] * LEVEL) * 100) / 100), orig: b.h } : b))
+    const out = bs.map((b, i) => (bparts[i] ? { ...b, hidden: true } : b))
+    for (const [i, parts] of Object.entries(bparts))
+      parts.forEach((q, k) => {
+        const dx = q.dx ?? 0
+        const dy = q.dy ?? 0
+        out.push({ ...bs[i], hidden: undefined, p: q.p.map(([x, y]) => [x + dx, y + dy]), home: q.p, partOf: +i, part: k, ...(q.gone ? { gone: true } : {}), ...(dx || dy ? { moved: true } : {}) })
+      })
+    return { ...site, buildings: out }
+  }, [site, bcut, bparts])
+  const setParts = (i, fn, key) => setPlan((p) => ({ ...p, bparts: { ...(p.bparts ?? {}), [i]: fn((p.bparts ?? {})[i]) } }), key)
+  const movePart = (i, k, dx, dy) => setParts(i, (ps) => ps.map((q, j) => (j === k ? { ...q, dx, dy } : q)), 'part-move:' + i + ':' + k)
+  // ✂ cutting the park or a building along a line, with a gap
+  const [cutMode, setCutMode] = useState(null) // 'park' | 'building'
+  const [cutGap, setCutGap] = useState(1.2)
+  const doCut = (a, b) => {
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.5) return setNote('Click two points further apart to cut.')
+    if (cutMode === 'park') {
+      const outlines = cutOutlines(park.outlines, a, b, cutGap)
+      if (outlines.length === park.outlines.length && outlines.every((o, k) => o === park.outlines[k])) setNote('The cut line did not cross the park.')
+      else {
+        setPark((pk) => ({ ...pk, outlines }))
+        setNote(`The park is now ${outlines.length} blob${outlines.length > 1 ? 's' : ''}. Drag a blue disc to move a blob, or Shift-click it to delete it.`)
+      }
+    } else if (cutMode === 'building' && bSel != null) {
+      const parts = bparts[bSel] ?? [{ p: site.buildings[bSel].p }]
+      const next = []
+      let changed = false
+      for (const q of parts) {
+        if (q.gone) {
+          next.push(q)
+          continue
+        }
+        const dx = q.dx ?? 0
+        const dy = q.dy ?? 0
+        const here = q.p.map(([x, y]) => [x + dx, y + dy])
+        const pieces = cutRing(here, a, b, cutGap)
+        if (pieces.length === 1 && Math.abs(ringArea(here)) - Math.abs(ringArea(pieces[0])) < 0.05) {
+          next.push(q)
+          continue
+        }
+        changed = true
+        for (const r of pieces) if (Math.abs(ringArea(r)) > 0.5) next.push({ p: r.map(([x, y]) => [Math.round((x - dx) * 100) / 100, Math.round((y - dy) * 100) / 100]), ...(dx || dy ? { dx, dy } : {}) })
+      }
+      if (!changed) setNote('The cut line did not cross the picked building.')
+      else {
+        setParts(bSel, () => next)
+        setBPart(null)
+        setNote(`The building is now in ${next.length} parts. Click a part to remove it or move it.`)
+      }
+    }
+    setCutMode(null)
+  }
   const maxCut = (i) => (site ? Math.max(0, Math.ceil((site.buildings[i].h - 0.6) / LEVEL) - 1) : 0)
   const cutBuilding = (i, steps) => {
     const n = Math.max(0, Math.min(maxCut(i), (bcut[i] ?? 0) + steps))
@@ -431,7 +489,7 @@ export default function App() {
   const plaza = plan.plaza ?? DEFAULT_PLAZA
   const [plazaEdit, setPlazaEdit] = useState(false)
   const setPlaza = (fn, key) => setPlan((p) => ({ ...p, plaza: fn(p.plaza ?? DEFAULT_PLAZA) }), key)
-  const plazaBuilt = useMemo(() => (site && plaza.on ? buildPlaza(plaza, site) : null), [plaza, site, topo]) // eslint-disable-line react-hooks/exhaustive-deps
+  const plazaBuilt = useMemo(() => (siteAdj && plaza.on ? buildPlaza(plaza, siteAdj) : null), [plaza, siteAdj, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // ----- lifted roofs and areas of reused GDR plates -----
   const lifts = plan.lifts ?? DEFAULT_LIFTS
   const [liftDraw, setLiftDraw] = useState(false)
@@ -449,7 +507,8 @@ export default function App() {
   // pick a handle, or (Shift-click / Delete) take it out
   const selectPark = (what, removeIt) => {
     if (!removeIt) return setParkSel(what)
-    if (what.t === 'p') setPark((pk) => (pk.outline.length > 3 ? { ...pk, outline: pk.outline.filter((_, i) => i !== what.id) } : pk))
+    if (what.t === 'p') setPark((pk) => ({ ...pk, outlines: pk.outlines.map((o, b) => (b === what.b && o.length > 3 ? o.filter((_, i) => i !== what.i) : o)) }))
+    if (what.t === 'b') setPark((pk) => (pk.outlines.length > 1 ? { ...pk, outlines: pk.outlines.filter((_, b) => b !== what.id) } : pk))
     if (what.t === 'h') setPark((pk) => (pk.heights.length > 1 ? { ...pk, heights: pk.heights.filter((q) => q.id !== what.id) } : pk))
     if (what.t === 'o') setPark((pk) => ({ ...pk, holes: pk.holes.filter((q) => q.id !== what.id) }))
     setParkSel(null)
@@ -939,6 +998,11 @@ export default function App() {
         return
       }
       // ↑ / ↓ raise or lower the design (10 cm, with Shift 1 m); the buildings and garages keep their real heights
+      if (cutMode && e.key === 'Escape') {
+        setCutMode(null)
+        e.preventDefault()
+        return
+      }
       if (bSel != null && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         cutBuilding(bSel, e.key === 'ArrowDown' ? 1 : -1)
         e.preventDefault()
@@ -1132,8 +1196,10 @@ export default function App() {
     <div className="app">
       <main className="stage">
         <Scene
-          site={siteAdj} bSel={bSel} onPickBuilding={(i) => { setBSel(i); setLiftSel(null); setParkSel(null) }} title={title} block={block} picked={picked} onPick={pick} onClear={() => {
+          site={siteAdj} bSel={bSel} bPart={bPart} cutMode={cutMode} onCut={doCut} onPartMove={movePart} gridDeg={park.netAngle}
+          onPickBuilding={(i, k) => { setBSel(i); setBPart(k ?? null); setLiftSel(null); setParkSel(null) }} title={title} block={block} picked={picked} onPick={pick} onClear={() => {
             setBSel(null)
+            setBPart(null)
             if (connect || wand) return
             setPicked(new Set())
             setChosen(null)
@@ -1150,6 +1216,15 @@ export default function App() {
           park={park} parkBuilt={parkBuilt} parkEdit={parkEdit} parkSel={parkSel} onParkSel={selectPark} onPark={setPark} placing={placing} onPlace={placeOnPark}
           onPickPark={() => !parkEdit && setNote('That is the elevated park. Shape it with ✎ Edit park in the top bar, or in the Elevated park section of the panel.')}
         />
+        {cutMode && (
+          <div className="connect-bar" role="status">
+            <b>✂ Cut {cutMode === 'park' ? 'the park' : 'the building'}</b> Click a first point, then a second point: the line between them cuts{cutMode === 'park' ? ' the park into blobs' : ' the picked building into parts'}.
+            <label className="nowrap wand-width">
+              Gap <input type="number" min="0.2" max="12" step="0.6" value={cutGap} onChange={(e) => +e.target.value > 0 && setCutGap(Math.min(12, Math.max(0.2, +e.target.value)))} /> m
+            </label>
+            <button onClick={() => setCutMode(null)} title="Esc">Cancel</button>
+          </div>
+        )}
         {liftDraw && (
           <div className="connect-bar" role="status">
             <b>▦ Lift plates</b> Drag over the ground, the plaza or a roof to lay a field of 1.20 m plates. On a roof it becomes a lifted roof. Click a field to select it, then ↑ / ↓ lifts it (Shift: 1.20 m); drag a selected field to move it.
@@ -1550,7 +1625,7 @@ export default function App() {
 
           <section className="park-panel">
             <h2><span className="dot" style={{ background: '#9aa3a8' }} /> Building heights</h2>
-            <p className="muted">Click a building in the model to pick it, then lower it in steps of 1.20 m (one plate) with ↓, or the buttons. ↑ raises it again, up to its real height. The park and lifted roofs on it follow its roof.</p>
+            <p className="muted">Click a building in the model to pick it, then lower it in steps of 1.20 m (one plate) with ↓, or the buttons. ↑ raises it again, up to its real height. The park and lifted roofs on it follow its roof. ✂ cuts a picked building into parts you can remove or move; what is gone stays as a dotted outline.</p>
             {bSel != null && site?.buildings[bSel] && (() => {
               const real = site.buildings[bSel].h
               const n = bcut[bSel] ?? 0
@@ -1567,6 +1642,41 @@ export default function App() {
                     <button disabled={!n} onClick={() => cutBuilding(bSel, -1)}>+ 1.20 m</button>
                     <button disabled={!n} onClick={() => cutBuilding(bSel, -n)}>Real height</button>
                   </div>
+                  <div className="actions">
+                    <button className={cutMode === 'building' ? 'primary on' : 'primary'} onClick={() => setCutMode(cutMode === 'building' ? null : 'building')}>✂ Cut this building</button>
+                    {bparts[bSel] && <button onClick={() => { setPlan((p) => { const c = { ...(p.bparts ?? {}) }; delete c[bSel]; return { ...p, bparts: c } }); setBPart(null) }}>Join all parts back</button>}
+                  </div>
+                  {bparts[bSel] && (
+                    <ol className="lift-list">
+                      {bparts[bSel].map((q, k) => (
+                        <li key={k}>
+                          <button className={bPart === k ? 'on' : ''} onClick={() => setBPart(bPart === k ? null : k)}>
+                            <b>Part {k + 1}</b> {Math.round(Math.abs(ringArea(q.p)))} m²{q.gone ? ' · removed' : ''}{q.dx || q.dy ? ` · moved ${Math.hypot(q.dx ?? 0, q.dy ?? 0).toFixed(1)} m` : ''}
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {bparts[bSel] && bPart != null && bparts[bSel][bPart] && (() => {
+                    const q = bparts[bSel][bPart]
+                    const a = (park.netAngle * Math.PI) / 180
+                    const step = (su, sv) => movePart(bSel, bPart, Math.round(((q.dx ?? 0) + 1.2 * (su * Math.cos(a) - sv * Math.sin(a))) * 100) / 100, Math.round(((q.dy ?? 0) + 1.2 * (su * Math.sin(a) + sv * Math.cos(a))) * 100) / 100)
+                    return (
+                      <div className="park-sel">
+                        <b>Part {bPart + 1}</b> <span className="muted small">drag the blue diamond on its roof to move it (1.20 m steps), or:</span>
+                        <div className="actions">
+                          <button onClick={() => step(-1, 0)} disabled={q.gone}>← along</button>
+                          <button onClick={() => step(1, 0)} disabled={q.gone}>along →</button>
+                          <button onClick={() => step(0, 1)} disabled={q.gone}>↥ across</button>
+                          <button onClick={() => step(0, -1)} disabled={q.gone}>↧ across</button>
+                        </div>
+                        <div className="actions">
+                          <button className={q.gone ? 'primary' : 'danger'} onClick={() => setParts(bSel, (ps) => ps.map((x, j) => (j === bPart ? (x.gone ? (({ gone, ...r }) => r)(x) : { ...x, gone: true }) : x)))}>{q.gone ? 'Bring it back' : 'Remove this part'}</button>
+                          <button disabled={!q.dx && !q.dy} onClick={() => setParts(bSel, (ps) => ps.map((x, j) => (j === bPart ? (({ dx, dy, ...r }) => r)(x) : x)))}>Back to its place</button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })()}
@@ -1722,6 +1832,10 @@ export default function App() {
                       <button className={placing === 't' ? 'on' : ''} onClick={() => setPlacing(placing === 't' ? null : 't')}>+ Opening with tree</button>
                       <button className={placing === 'o' ? 'on' : ''} onClick={() => setPlacing(placing === 'o' ? null : 'o')}>+ Light well</button>
                     </div>
+                    <div className="actions">
+                      <button className={cutMode === 'park' ? 'primary on' : 'primary'} onClick={() => { setCutMode(cutMode === 'park' ? null : 'park'); setPlacing(null) }}>✂ Cut the park into blobs</button>
+                      <span className="muted small">{park.outlines.length} blob{park.outlines.length > 1 ? 's' : ''}</span>
+                    </div>
                     {parkSel?.t === 'h' && (() => {
                       const q = park.heights.find((x) => x.id === parkSel.id)
                       if (!q) return null
@@ -1766,11 +1880,19 @@ export default function App() {
                         </div>
                       )
                     })()}
-                    {parkSel?.t === 'p' && park.outline[parkSel.id] && (
+                    {parkSel?.t === 'b' && park.outlines[parkSel.id] && (
                       <div className="park-sel">
-                        <b>Edge point {parkSel.id + 1}</b> <span className="muted small">of {park.outline.length}</span>
+                        <b>Blob {parkSel.id + 1}</b> <span className="muted small">of {park.outlines.length} · drag the blue disc to move it</span>
                         <div className="actions">
-                          <button className="danger" disabled={park.outline.length <= 3} onClick={() => selectPark(parkSel, true)}>Delete this point</button>
+                          <button className="danger" disabled={park.outlines.length <= 1} onClick={() => selectPark(parkSel, true)}>Delete this blob</button>
+                        </div>
+                      </div>
+                    )}
+                    {parkSel?.t === 'p' && park.outlines[parkSel.b]?.[parkSel.i] && (
+                      <div className="park-sel">
+                        <b>Edge point {parkSel.i + 1}</b> <span className="muted small">of {park.outlines[parkSel.b].length}{park.outlines.length > 1 ? ` on blob ${parkSel.b + 1}` : ''}</span>
+                        <div className="actions">
+                          <button className="danger" disabled={park.outlines[parkSel.b].length <= 3} onClick={() => selectPark(parkSel, true)}>Delete this point</button>
                         </div>
                       </div>
                     )}

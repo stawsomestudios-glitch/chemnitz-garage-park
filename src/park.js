@@ -2,9 +2,10 @@ import * as THREE from 'three'
 import { ground } from './terrain.js'
 import { GARAGES, MODULE } from './garages.js'
 import { MATERIALS } from './materials.js'
+import polygonClipping from './vendor/polygon-clipping.js'
 
 // The elevated park: one free-form deck, like a landscape mesh.
-//   outline  the edge, as points [east, north] in metres; drawn as a smooth closed curve through them
+//   outlines the blobs of the deck: each a list of points [east, north] in metres, drawn as a smooth closed curve through them
 //   heights  points that set the height: { id, x, y, h } h = metres above the ground there,
 //            or roof: true = it sits on the roof of the building or garage below (plus `h` as a small gap)
 //   holes    round openings { id, x, y, r, tree } (a tree grows up through it when `tree`)
@@ -12,10 +13,10 @@ import { MATERIALS } from './materials.js'
 // higher = flatter plateaus around each point and steeper slopes between them).
 export const DEFAULT_PARK = {
   on: true,
-  outline: [
+  outlines: [[
     [-56, 92], [-62, 112], [-60, 132], [-40, 138], [-20, 141], [-6, 131], [-4, 116], [0, 100], [5, 84], [10, 66], [20, 53], [32, 41], [27, 33], [21, 25],
     [12, 24], [8, 31], [2, 31], [-6, 26], [-9, 36], [-7, 52], [-9, 70], [-17, 86], [-38, 87],
-  ],
+  ]],
   heights: [
     { id: 'h1', x: -34, y: 115, h: 17 },
     { id: 'h2', x: -55, y: 120, h: 17 },
@@ -51,17 +52,18 @@ export const newParkId = (p) => p + Date.now().toString(36) + (idn++).toString(3
 export function cleanPark(p) {
   if (!p || typeof p !== 'object') return DEFAULT_PARK
   const pt = (q) => Array.isArray(q) && q.length === 2 && q.every((v) => Number.isFinite(+v))
-  const outline = Array.isArray(p.outline) ? p.outline.filter(pt).map(([x, y]) => [+x, +y]) : []
+  const list = Array.isArray(p.outlines) ? p.outlines : Array.isArray(p.outline) ? [p.outline] : []
+  const outlines = list.filter(Array.isArray).map((o) => o.filter(pt).map(([x, y]) => [+x, +y])).filter((o) => o.length >= 3)
   const heights = (Array.isArray(p.heights) ? p.heights : [])
     .filter((h) => h && Number.isFinite(+h.x) && Number.isFinite(+h.y))
     .map((h, i) => ({ id: String(h.id ?? 'h' + i), x: +h.x, y: +h.y, h: num(h.h, 0, -2, 60), ...(h.roof ? { roof: true } : {}) }))
   const holes = (Array.isArray(p.holes) ? p.holes : [])
     .filter((h) => h && Number.isFinite(+h.x) && Number.isFinite(+h.y))
     .map((h, i) => ({ id: String(h.id ?? 'o' + i), x: +h.x, y: +h.y, r: num(h.r, 2, 0.5, 20), tree: !!h.tree }))
-  if (outline.length < 3 || !heights.length) return DEFAULT_PARK
+  if (!outlines.length || !heights.length) return DEFAULT_PARK
   return {
     on: p.on !== false,
-    outline,
+    outlines,
     heights,
     holes,
     thick: num(p.thick, 0.45, 0.1, 3),
@@ -142,7 +144,7 @@ export function roofAt(x, y, buildings) {
 // the buildings of the map, ready for roofAt
 export function prepBuildings(site) {
   return site.buildings
-    .filter((b) => b.kind !== 'garage')
+    .filter((b) => b.kind !== 'garage' && !b.hidden && !b.gone)
     .map((b) => {
       const xs = b.p.map((q) => q[0])
       const ys = b.p.map((q) => q[1])
@@ -226,13 +228,21 @@ const SLOPE_COLOURS = [
 
 // Everything the park is drawn from.
 export function buildPark(park, buildings) {
-  let ring = smoothRing(park.outline)
-  if (THREE.ShapeUtils.isClockWise(ring.map(([x, y]) => new THREE.Vector2(x, y)))) ring = ring.reverse()
+  // every blob of the deck: its own smooth edge, anticlockwise
+  const rings = park.outlines.map((o) => {
+    const r = smoothRing(o)
+    return THREE.ShapeUtils.isClockWise(r.map(([x, y]) => new THREE.Vector2(x, y))) ? r.reverse() : r
+  })
+  const ring = rings[0]
+  const ringOf = (x, y) => rings.findIndex((r) => inRing(x, y, r))
+  const inAny = (x, y) => ringOf(x, y) >= 0
+  const distAny = (x, y) => Math.min(...rings.map((r) => distToRing(x, y, r)))
   // openings only where they fit inside the deck and don't touch each other
   const holes = []
   const skipped = []
   for (const h of park.holes) {
-    const fits = inRing(h.x, h.y, ring) && distToRing(h.x, h.y, ring) > h.r + 0.4 && holes.every((o) => Math.hypot(o.x - h.x, o.y - h.y) > o.r + h.r + 0.4)
+    const k = ringOf(h.x, h.y)
+    const fits = k >= 0 && distToRing(h.x, h.y, rings[k]) > h.r + 0.4 && holes.every((o) => Math.hypot(o.x - h.x, o.y - h.y) > o.r + h.r + 0.4)
     ;(fits ? holes : skipped).push(h)
   }
   const holeRings = holes.map((h) => holeRing(h).reverse())
@@ -242,12 +252,15 @@ export function buildPark(park, buildings) {
   // the plan triangulated, then refined to the mesh size
   const xs = []
   const ys = []
-  for (const r of [ring, ...holeRings]) for (const [x, y] of r) xs.push(x), ys.push(y)
-  const faces = THREE.ShapeUtils.triangulateShape(
-    ring.map(([x, y]) => new THREE.Vector2(x, y)),
-    holeRings.map((r) => r.map(([x, y]) => new THREE.Vector2(x, y))),
-  )
-  let tris = refine(xs, ys, faces.flat(), park.cell)
+  let faces = []
+  rings.forEach((rg, k) => {
+    const hr = holeRings.filter((_, j) => ringOf(holes[j].x, holes[j].y) === k)
+    const base = xs.length
+    for (const r of [rg, ...hr]) for (const [x, y] of r) xs.push(x), ys.push(y)
+    const f = THREE.ShapeUtils.triangulateShape(rg.map(([x, y]) => new THREE.Vector2(x, y)), hr.map((r) => r.map(([x, y]) => new THREE.Vector2(x, y))))
+    faces = faces.concat(f.flat().map((i) => i + base))
+  })
+  let tris = refine(xs, ys, faces, park.cell)
   const n = xs.length
   const zs = new Float32Array(n)
   for (let i = 0; i < n; i++) zs[i] = H(xs[i], ys[i])
@@ -327,13 +340,13 @@ export function buildPark(park, buildings) {
 
   // the net: lines in two directions, draped over the deck
   const net = []
-  const inside = (x, y) => inRing(x, y, ring) && !holes.some((h) => Math.hypot(h.x - x, h.y - y) < h.r)
+  const inside = (x, y) => inAny(x, y) && !holes.some((h) => Math.hypot(h.x - x, h.y - y) < h.r)
   if (park.net > 0) {
     const a = (park.netAngle * Math.PI) / 180
     const U = [Math.cos(a), Math.sin(a)]
     const V = [-Math.sin(a), Math.cos(a)]
     let [u0, u1, v0, v1] = [Infinity, -Infinity, Infinity, -Infinity]
-    for (const [x, y] of ring) {
+    for (const [x, y] of rings.flat()) {
       const u = x * U[0] + y * U[1]
       const v = x * V[0] + y * V[1]
       ;(u0 = Math.min(u0, u)), (u1 = Math.max(u1, u)), (v0 = Math.min(v0, v)), (v1 = Math.max(v1, v))
@@ -372,7 +385,7 @@ export function buildPark(park, buildings) {
       for (let j = Math.ceil(-R / S); j <= R / S; j++) {
         const x = U[0] * i * S + V[0] * j * S
         const y = U[1] * i * S + V[1] * j * S
-        if (!inside(x, y) || distToRing(x, y, ring) < 0.8) continue
+        if (!inside(x, y) || distAny(x, y) < 0.8) continue
         const z = H(x, y) - T
         if (z - ground(x, y) < 2.4) continue
         if (roofAt(x, y, buildings) != null) continue
@@ -389,6 +402,7 @@ export function buildPark(park, buildings) {
   }
   return {
     ring,
+    rings,
     holes,
     skipped,
     levels,
@@ -402,4 +416,65 @@ export function buildPark(park, buildings) {
     trees: holes.filter((h) => h.tree).map((h) => ({ ...h, deck: H(h.x, h.y), g: ground(h.x, h.y) })),
     stats: { area, maxSlope, high: hi, columns: columns.length },
   }
+}
+
+// ---------- cutting ----------
+export const ringArea = (r) => {
+  let a = 0
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1]
+  return a / 2
+}
+// a closed outline cut along the line from a to b (a little longer), leaving a gap `gap` wide: the pieces
+export function cutRing(ring, a, b, gap) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+  const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L]
+  const n = [(-d[1] * gap) / 2, (d[0] * gap) / 2]
+  const A = [a[0] - d[0], a[1] - d[1]]
+  const B = [b[0] + d[0], b[1] + d[1]]
+  const strip = [[A[0] + n[0], A[1] + n[1]], [B[0] + n[0], B[1] + n[1]], [B[0] - n[0], B[1] - n[1]], [A[0] - n[0], A[1] - n[1]], [A[0] + n[0], A[1] + n[1]]]
+  try {
+    return polygonClipping.difference([[...ring, ring[0]]], [strip]).map((poly) => poly[0].slice(0, -1))
+  } catch {
+    return [ring]
+  }
+}
+// fewer points on a closed outline (Douglas–Peucker), keeping its shape within `tol` metres
+function dp(pts, tol) {
+  if (pts.length < 3) return pts
+  const [ax, ay] = pts[0]
+  const [bx, by] = pts[pts.length - 1]
+  const L = Math.hypot(bx - ax, by - ay) || 1e-9
+  let wd = 0
+  let wi = -1
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = Math.abs((pts[i][0] - ax) * (by - ay) - (pts[i][1] - ay) * (bx - ax)) / L
+    if (d > wd) (wd = d), (wi = i)
+  }
+  if (wd <= tol) return [pts[0], pts[pts.length - 1]]
+  return [...dp(pts.slice(0, wi + 1), tol).slice(0, -1), ...dp(pts.slice(wi), tol)]
+}
+export function simplifyClosed(r, tol) {
+  let k = 0
+  let far = -1
+  for (let i = 1; i < r.length; i++) {
+    const d = Math.hypot(r[i][0] - r[0][0], r[i][1] - r[0][1])
+    if (d > far) (far = d), (k = i)
+  }
+  return [...dp(r.slice(0, k + 1), tol).slice(0, -1), ...dp([...r.slice(k), r[0]], tol).slice(0, -1)]
+}
+// the park's blobs cut along a line: blobs it doesn't cross stay as they are
+export function cutOutlines(outlines, a, b, gap) {
+  const out = []
+  for (const o of outlines) {
+    const dense = smoothRing(o, 0.6)
+    const pieces = cutRing(dense, a, b, gap)
+    const before = Math.abs(ringArea(dense))
+    const after = pieces.reduce((s, p) => s + Math.abs(ringArea(p)), 0)
+    if (pieces.length === 1 && before - after < 0.5) {
+      out.push(o)
+      continue
+    }
+    for (const p of pieces) if (Math.abs(ringArea(p)) > 4) out.push(simplifyClosed(p, 0.45).map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]))
+  }
+  return out
 }

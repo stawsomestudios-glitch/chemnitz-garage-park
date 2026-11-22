@@ -62,3 +62,9 @@ Opened roofs: `plan.roofs` ({ garage id: `tilt` | `frame` | `open` }; missing = 
 Plate fields can have a timber grid frame (`grid`: beams under every 1.20 m joint, posts every `postEvery` plates) instead of steel supports, and open bays (`gaps`: none / stripes / checker / scatter). Field L4 is the market roof on the plaza.
 
 Building heights: `plan.bcut` ({ building number in site.json: steps of 1.20 m lower }). `siteAdj` in `src/App.jsx` is the site with those heights; it feeds the Scene and `prepBuildings`, so the park and lifted roofs follow lowered roofs. Click a building (Context in `src/Scene.jsx`, picked one glows orange), then ↓ / ↑ or the panel buttons; never above its real height. A lowered building keeps its original volume as a dotted black outline (Context, `orig`).
+
+## Cutting
+
+The park is a list of blobs (`park.outlines`; old plans with one `outline` are read as one blob). ✂ Cut the park (Elevated park section, while shaping) and ✂ Cut this building (Building heights, with a building picked) use `CutTool` in `src/Scene.jsx`: two clicks give a line, cut with a gap (default 1.20 m) by `cutOutlines` / `cutRing` in `src/park.js`, which use polygon-clipping (copied as one file to `src/vendor/polygon-clipping.js`, MIT). A blob has a blue disc to drag it; Shift-click or the panel deletes it. Cut buildings: `plan.bparts` ({ building number: [{ p, dx, dy, gone }] }); `siteAdj` hides the original and adds the parts (`partOf`, `part`, `home`). A picked part has a blue diamond to drag it in 1.20 m steps along the plate grid, panel buttons to move, remove, bring back, and Join all parts back. Removed or moved parts leave their old volume dotted. Shop fronts follow the parts of the two slabs.
+
+Note: `node_modules` here is a link to `../garage-blocks/node_modules` (the disk is nearly full); do not run `npm install` in this folder without replacing that link first.

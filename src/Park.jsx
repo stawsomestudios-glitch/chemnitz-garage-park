@@ -62,7 +62,7 @@ function Trees({ list }) {
   })
 }
 
-export default function Park({ park, built, edit, sel, onSel, onChange, placing, onPlace, onPick }) {
+export default function Park({ park, built, edit, sel, onSel, onChange, placing, onPlace, onPick, cutting }) {
   const { controls, camera } = useThree()
   const mat = useMemo(() => makeMaterial(park.mat, park.col), [park.mat, park.col])
   useEffect(() => () => mat.dispose(), [mat])
@@ -89,7 +89,9 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
     e.stopPropagation()
     if (e.shiftKey) return
     onSel(what)
-    drag.current = { what, level }
+    plane.constant = -level
+    const start = e.ray.intersectPlane(plane, hit) ? [hit.x, -hit.z] : null
+    drag.current = { what, level, start, orig: what.t === 'b' ? park.outlines[what.id] : null }
     e.target.setPointerCapture(e.pointerId)
     if (controls) controls.enabled = false
   }
@@ -101,7 +103,13 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
     if (!e.ray.intersectPlane(plane, hit)) return
     const p = [Math.round(hit.x * 10) / 10, Math.round(-hit.z * 10) / 10]
     onChange((pk) => {
-      if (what.t === 'p') return { ...pk, outline: pk.outline.map((q, i) => (i === what.id ? p : q)) }
+      if (what.t === 'p') return { ...pk, outlines: pk.outlines.map((o, b) => (b === what.b ? o.map((q, i) => (i === what.i ? p : q)) : o)) }
+      if (what.t === 'b') {
+        if (!d.start) return pk
+        const dx = Math.round((hit.x - d.start[0]) * 10) / 10
+        const dy = Math.round((-hit.z - d.start[1]) * 10) / 10
+        return { ...pk, outlines: pk.outlines.map((o, b) => (b === what.id ? d.orig.map(([x, y]) => [Math.round((x + dx) * 10) / 10, Math.round((y + dy) * 10) / 10]) : o)) }
+      }
       if (what.t === 'h') return { ...pk, heights: pk.heights.map((q) => (q.id === what.id ? { ...q, x: p[0], y: p[1] } : q)) }
       return { ...pk, holes: pk.holes.map((q) => (q.id === what.id ? { ...q, x: p[0], y: p[1] } : q)) }
     }, 'park-drag:' + what.t + what.id)
@@ -138,7 +146,6 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
   if (!built) return null
   const H = built.H
   const isSel = (t, id) => sel && sel.t === t && sel.id === id
-  const n = park.outline.length
   const ring3 = (r, lift) => [...r, r[0]].map(([x, y]) => [x, H(x, y) + lift, -y])
 
   return (
@@ -151,6 +158,7 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
         receiveShadow
         userData={{ layer: 'Park - deck', stack: true }}
         onClick={(e) => {
+          if (cutting) return
           if (placing) return place(e, [Math.round(e.point.x * 10) / 10, Math.round(-e.point.z * 10) / 10])
           if (e.delta > 6) return
           e.stopPropagation()
@@ -169,7 +177,9 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
           <lineBasicMaterial color="#2d2d2d" transparent opacity={0.42} />
         </lineSegments>
       )}
-      <Line points={ring3(built.ring, 0.03)} color="#2d2d2d" lineWidth={1.6} raycast={() => null} userData={{ noExport: true }} />
+      {built.rings.map((r, k) => (
+        <Line key={'ring' + k} points={ring3(r, 0.03)} color="#2d2d2d" lineWidth={1.6} raycast={() => null} userData={{ noExport: true }} />
+      ))}
       {built.holes.map((h) => (
         <Line key={h.id} points={ring3(holeOutline(h), 0.03)} color="#2d2d2d" lineWidth={1.4} raycast={() => null} userData={{ noExport: true }} />
       ))}
@@ -196,13 +206,39 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
 
       {edit && (
         <group userData={{ noExport: true }}>
-          {/* the edge points */}
-          {park.outline.map(([x, y], i) => {
-            const z = H(x, y) + 0.5
-            const what = { t: 'p', id: i }
+          {/* each blob: a blue disc in its middle drags the whole blob */}
+          {park.outlines.map((o, b) => {
+            const cx = o.reduce((s, q) => s + q[0], 0) / o.length
+            const cy = o.reduce((s, q) => s + q[1], 0) / o.length
+            const z = H(cx, cy) + 1.6
+            const what = { t: 'b', id: b }
             return (
               <mesh
-                key={'p' + i}
+                key={'blob' + b}
+                ref={keep}
+                geometry={DISC}
+                scale={1.6}
+                position={[cx, z, -cy]}
+                renderOrder={9}
+                onPointerDown={(e) => startDrag(e, what, z)}
+                onPointerMove={(e) => moveDrag(e, what)}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={(e) => remove(e, what)}
+                onPointerOver={cursor('move')}
+                onPointerOut={cursor('')}
+              >
+                <meshBasicMaterial color={isSel('b', b) ? '#ff7a1a' : '#3a7bd5'} depthTest={false} />
+              </mesh>
+            )
+          })}
+          {/* the edge points */}
+          {park.outlines.flatMap((o, b) => o.map(([x, y], i) => {
+            const z = H(x, y) + 0.5
+            const what = { t: 'p', id: b + ':' + i, b, i }
+            return (
+              <mesh
+                key={'p' + b + ':' + i}
                 ref={keep}
                 geometry={HANDLE}
                 position={[x, z, -y]}
@@ -215,26 +251,26 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
                 onPointerOver={cursor('move')}
                 onPointerOut={cursor('')}
               >
-                <meshBasicMaterial color={isSel('p', i) ? '#ff7a1a' : '#ffffff'} depthTest={false} transparent opacity={0.95} />
+                <meshBasicMaterial color={isSel('p', b + ':' + i) ? '#ff7a1a' : '#ffffff'} depthTest={false} transparent opacity={0.95} />
               </mesh>
             )
-          })}
+          }))}
           {/* + between two edge points adds one */}
-          {park.outline.map(([x, y], i) => {
-            const [x2, y2] = park.outline[(i + 1) % n]
+          {park.outlines.flatMap((o, b) => o.map(([x, y], i) => {
+            const [x2, y2] = o[(i + 1) % o.length]
             const mx = (x + x2) / 2
             const my = (y + y2) / 2
             return (
               <mesh
-                key={'m' + i}
+                key={'m' + b + ':' + i}
                 ref={keep}
                 geometry={PLUS}
                 position={[mx, H(mx, my) + 0.5, -my]}
                 renderOrder={8}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onChange((pk) => ({ ...pk, outline: [...pk.outline.slice(0, i + 1), [Math.round(mx * 10) / 10, Math.round(my * 10) / 10], ...pk.outline.slice(i + 1)] }))
-                  onSel({ t: 'p', id: i + 1 })
+                  onChange((pk) => ({ ...pk, outlines: pk.outlines.map((oo, bb) => (bb === b ? [...oo.slice(0, i + 1), [Math.round(mx * 10) / 10, Math.round(my * 10) / 10], ...oo.slice(i + 1)] : oo)) }))
+                  onSel({ t: 'p', id: b + ':' + (i + 1), b, i: i + 1 })
                 }}
                 onPointerOver={cursor('copy')}
                 onPointerOut={cursor('')}
@@ -242,7 +278,7 @@ export default function Park({ park, built, edit, sel, onSel, onChange, placing,
                 <meshBasicMaterial color="#9aa0a6" depthTest={false} transparent opacity={0.85} />
               </mesh>
             )
-          })}
+          }))}
           {/* height points on their stems */}
           {built.levels.map((q) => {
             const what = { t: 'h', id: q.id }
