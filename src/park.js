@@ -135,6 +135,7 @@ export function roofAt(x, y, buildings) {
     if (inRing(x, y, b.p)) top = Math.max(top ?? -Infinity, b.top())
   }
   for (const g of GARAGES) {
+    if (buildings.goneGarages?.has(g.id)) continue
     const dx = x - g.x
     const dy = y - g.y
     if (Math.abs(dx * g.u[0] + dy * g.u[1]) <= MODULE.width / 2 && Math.abs(dx * g.n[0] + dy * g.n[1]) <= MODULE.depth / 2) top = Math.max(top ?? -Infinity, ground(g.x, g.y) + MODULE.height)
@@ -142,8 +143,8 @@ export function roofAt(x, y, buildings) {
   return top
 }
 // the buildings of the map, ready for roofAt
-export function prepBuildings(site) {
-  return site.buildings
+export function prepBuildings(site, goneGarages) {
+  const list = site.buildings
     .filter((b) => b.kind !== 'garage' && !b.hidden && !b.gone)
     .map((b) => {
       const xs = b.p.map((q) => q[0])
@@ -151,6 +152,8 @@ export function prepBuildings(site) {
       const c = b.p.reduce((a, q) => [a[0] + q[0] / b.p.length, a[1] + q[1] / b.p.length], [0, 0])
       return { p: b.p, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], top: () => ground(c[0], c[1]) + b.h }
     })
+  list.goneGarages = goneGarages ?? null
+  return list
 }
 
 // the site level of each height point (with the ground, or on the roof below)

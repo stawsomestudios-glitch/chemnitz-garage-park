@@ -117,7 +117,7 @@ function clean(s) {
     }))
   return { title, block, items, // a plan saved before the plate grid existed: its deck becomes reused GDR plates once
     park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS,
-    roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open'].includes(m))) : DEFAULT_ROOFS,
+    roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open', 'gone'].includes(m))) : DEFAULT_ROOFS,
     roofColour: parseColour(s.roofColour) ?? '#c0392b',
     bparts: Object.fromEntries(Object.entries(s.bparts ?? {}).filter(([i, ps]) => Number.isInteger(+i) && Array.isArray(ps) && ps.length).map(([i, ps]) => [i, ps.filter((q) => q && Array.isArray(q.p) && q.p.length >= 3).map((q) => ({ p: q.p.map(([x, y]) => [+x, +y]), ...(+q.dx ? { dx: +q.dx } : {}), ...(+q.dy ? { dy: +q.dy } : {}), ...(q.gone ? { gone: true } : {}) }))])),
     bcut: Object.fromEntries(Object.entries(s.bcut ?? {}).filter(([i, n]) => Number.isInteger(+i) && Number.isInteger(+n) && +n > 0).map(([i, n]) => [i, +n])), ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
@@ -483,7 +483,8 @@ export default function App() {
     const h = Math.max(0.6, site.buildings[i].h - n * LEVEL)
     setNote(`Building ${h.toFixed(2)} m high${n ? ` (${(n * LEVEL).toFixed(2)} m below its real height: ${n} step${n > 1 ? 's' : ''} of 1.20 m)` : ' (its real height)'}`)
   }
-  const parkBuildings = useMemo(() => (siteAdj ? prepBuildings(siteAdj) : []), [siteAdj])
+  const goneKey = Object.entries(plan.roofs ?? {}).filter(([, m]) => m === 'gone').map(([id]) => id).join(',')
+  const parkBuildings = useMemo(() => (siteAdj ? prepBuildings(siteAdj, new Set(goneKey ? goneKey.split(',') : [])) : []), [siteAdj, goneKey])
   const parkBuilt = useMemo(() => (site && park.on ? buildPark(park, parkBuildings) : null), [park, parkBuildings, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // ----- the city plaza -----
   const plaza = plan.plaza ?? DEFAULT_PLAZA
@@ -1600,7 +1601,7 @@ export default function App() {
                 <div className="snaprow">
                   <span>Roof{ids.length > 1 ? ` of all ${ids.length}` : ''}</span>
                   <div className="seg-group small-seg" role="group" aria-label="Roof">
-                    {ROOF_MODES.map(([k, l]) => (
+                    {ROOF_MODES.filter(([k]) => k !== 'gone').map(([k, l]) => (
                       <button
                         key={k}
                         className={one === k ? 'on' : ''}
@@ -1610,6 +1611,18 @@ export default function App() {
                         {l}
                       </button>
                     ))}
+                  </div>
+                  <div className="actions">
+                    {one !== 'gone' ? (
+                      <button className="danger" title="Take the garage away. Its outer outline stays as a dotted black line" onClick={() => setPlan((p) => { const r = { ...(p.roofs ?? {}) }; for (const id of ids) r[id] = 'gone'; return { ...p, roofs: r } })}>
+                        Remove garage{ids.length > 1 ? 's' : ''}
+                      </button>
+                    ) : null}
+                    {modes.has('gone') && (
+                      <button onClick={() => setPlan((p) => { const r = { ...(p.roofs ?? {}) }; for (const id of ids) if (r[id] === 'gone') delete r[id]; return { ...p, roofs: r } })}>
+                        Bring {ids.length > 1 ? 'them' : 'it'} back
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -1793,13 +1806,14 @@ export default function App() {
             })()}
             <p className="muted small">The plate grid turns with the park's mesh direction (Elevated park section), so plates, deck joints and columns always line up.</p>
             <h3>Opened garage roofs</h3>
-            <p className="muted small">Select garages (or a whole row) and choose their roof in the selection panel: Tilted open, Frame only, or Removed, to let light and air in.</p>
+            <p className="muted small">Select garages (or a whole row) and choose their roof in the selection panel: Tilted open, Frame only, or Removed, to let light and air in. "Remove garage" takes the whole garage away and leaves its outer outline dotted; click its grey place to pick it and bring it back.</p>
             <p className="park-stats">
               {ROOF_MODES.slice(1).map(([k, l]) => <span key={k}><b>{Object.values(plan.roofs ?? {}).filter((m) => m === k).length}</b> {l.toLowerCase()}</span>)}
             </p>
             <ColourField label="Frames and tilted plates" value={plan.roofColour ?? '#c0392b'} changed={(plan.roofColour ?? '#c0392b') !== '#c0392b'} onChange={(c) => setPlan((p) => ({ ...p, roofColour: c }), 'roofcol')} onReset={() => setPlan((p) => ({ ...p, roofColour: '#c0392b' }))} />
             <div className="actions">
-              <button disabled={!Object.keys(plan.roofs ?? {}).length} onClick={() => setPlan((p) => ({ ...p, roofs: {} }))}>Close all roofs</button>
+              <button disabled={!Object.values(plan.roofs ?? {}).some((m) => m !== 'gone')} onClick={() => setPlan((p) => ({ ...p, roofs: Object.fromEntries(Object.entries(p.roofs ?? {}).filter(([, m]) => m === 'gone')) }))}>Close all roofs</button>
+              <button disabled={!goneKey} onClick={() => setPlan((p) => ({ ...p, roofs: Object.fromEntries(Object.entries(p.roofs ?? {}).filter(([, m]) => m !== 'gone')) }))}>Bring all garages back</button>
               <button onClick={() => setPlan((p) => ({ ...p, roofs: DEFAULT_ROOFS }))}>Start again</button>
             </div>
           </section>
