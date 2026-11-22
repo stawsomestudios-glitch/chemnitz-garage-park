@@ -36,13 +36,12 @@ export const DEFAULT_PARK = {
   ],
   thick: 0.45,
   cell: 1.5,
-  net: 2,
+  net: 1.2,
   netAngle: 11,
-  columns: 7.5,
+  columns: 7.2,
   rail: true,
   smooth: 2,
-  mat: 'concrete',
-  col: '#e4e1da',
+  mat: 'gdr',
   slope: false,
 }
 
@@ -261,9 +260,11 @@ export function buildPark(park, buildings) {
   let maxSlope = 0
   let hi = -Infinity
   const c = new THREE.Color()
+  const gc = Math.cos((park.netAngle * Math.PI) / 180)
+  const gs = Math.sin((park.netAngle * Math.PI) / 180)
   for (let i = 0; i < n; i++) {
     pos.set([xs[i], zs[i], -ys[i]], i * 3)
-    uv.set([xs[i], ys[i]], i * 2)
+    uv.set([xs[i] * gc + ys[i] * gs, -xs[i] * gs + ys[i] * gc], i * 2)
     const gx = (H(xs[i] + 0.5, ys[i]) - H(xs[i] - 0.5, ys[i])) / 1
     const gy = (H(xs[i], ys[i] + 0.5) - H(xs[i], ys[i] - 0.5)) / 1
     const s = Math.hypot(gx, gy) * 100
@@ -366,11 +367,11 @@ export function buildPark(park, buildings) {
     const U = [Math.cos(a), Math.sin(a)]
     const V = [-Math.sin(a), Math.cos(a)]
     const S = park.columns
-    const R = 200
-    for (let i = -R / S; i <= R / S; i++)
-      for (let j = -R / S; j <= R / S; j++) {
-        const x = -20 + U[0] * i * S + V[0] * j * S
-        const y = 80 + U[1] * i * S + V[1] * j * S
+    const R = 260
+    for (let i = Math.ceil(-R / S); i <= R / S; i++)
+      for (let j = Math.ceil(-R / S); j <= R / S; j++) {
+        const x = U[0] * i * S + V[0] * j * S
+        const y = U[1] * i * S + V[1] * j * S
         if (!inside(x, y) || distToRing(x, y, ring) < 0.8) continue
         const z = H(x, y) - T
         if (z - ground(x, y) < 2.4) continue

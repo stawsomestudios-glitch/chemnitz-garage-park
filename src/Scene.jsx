@@ -11,6 +11,7 @@ import { KINDS, dims } from './elements.js'
 import Ribbon from './Ribbon.jsx'
 import Park from './Park.jsx'
 import Plaza from './Plaza.jsx'
+import Lifts from './Lifts.jsx'
 import { ground, seatBuilding, terrainMesh, topoOn } from './terrain.js'
 import { COBALT, RIBBON_KINDS, buildRibbon, passages } from './ribbon.js'
 
@@ -474,7 +475,7 @@ function Wand({ wand, onWand }) {
   )
 }
 
-export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza }) {
+export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings }) {
   const built = useMemo(() => (ribbon.on ? buildRibbon(ribbon, undefined, ground) : null), [ribbon, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // the ribbons you drew with the magic wand, each along its own line
   const builtDrawn = useMemo(() => drawn.map((d) => ({ d, built: buildRibbon(d, d.route, ground) })), [drawn, topo]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -485,7 +486,7 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
     return out
   }, [built, builtDrawn, ribbon.pieces])
   const tags = useItems({ title, block, picked, show, glabel, items, tags: allTags, chosen, active, pass, topo })
-  const passive = !!connect || !!wand || !!placing
+  const passive = !!connect || !!wand || !!placing || !!liftDraw
   const refs = useRef([])
   const down = useRef([0, 0])
   return (
@@ -536,6 +537,7 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
           <Ribbon key={d.id} built={b} rib={d} layer={`Ribbon - ${d.name}`} chosen={active === d.id ? chosen : []} onPickPiece={(i, add) => onPickPiece(i, add, d.id)} connecting={passive} />
         ))}
         {wand && <Wand wand={wand} onWand={onWand} />}
+        {liftsBuilt && <Lifts built={liftsBuilt} lifts={lifts} deg={park?.netAngle ?? 11} sel={liftSel} onSel={onLiftSel} onChange={onLifts} onCreate={onLiftCreate} drawing={liftDraw} buildings={buildings} />}
         {plaza?.on && <Plaza plaza={plaza} built={plazaBuilt} edit={plazaEdit} onChange={onPlaza} />}
         {park?.on && <Park park={park} built={parkBuilt} edit={parkEdit} sel={parkSel} onSel={onParkSel} onChange={onPark} placing={placing} onPlace={onPlace} onPick={onPickPark} />}
         <Elements items={items} picked={picked} onSelect={onSelectItem} onMove={onMoveItem} snap={snap} connecting={passive} locked={locked} layerName={layerName} />

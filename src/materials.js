@@ -14,6 +14,7 @@ export const MATERIALS = {
   grass: { name: 'Grass', colour: '#7da35a', rough: 1, metal: 0, tex: 'speckle' },
   granite: { name: 'Granite slabs', colour: '#d8d3c8', rough: 0.85, metal: 0, tex: 'slabs' },
   setts: { name: 'Granite setts', colour: '#a29b90', rough: 0.95, metal: 0, tex: 'setts' },
+  gdr: { name: 'GDR plates 1.20', colour: '#d8d4cb', rough: 0.92, metal: 0, tex: 'gdr' },
 }
 export const MATERIAL_IDS = Object.keys(MATERIALS)
 
@@ -95,6 +96,37 @@ function pattern(kind) {
         g.fillRect(x, row * rowH, len, kind === 'slabs' ? 2 : 3)
         g.fillRect(x, row * rowH, kind === 'slabs' ? 2 : 3, rowH)
       }
+  } else if (kind === 'gdr') {
+    // 2 × 2 reused prefab plates of 1.20 m: each its own weathered tone, exposed stones, stains, two lifting anchors, dark joints
+    const P = S / 2
+    for (let a = 0; a < 2; a++)
+      for (let b = 0; b < 2; b++) {
+        const t = 0.8 + r() * 0.2
+        g.fillStyle = `rgb(${255 * t},${250 * t},${240 * t})`
+        g.fillRect(a * P, b * P, P, P)
+        for (let i = 0; i < 900; i++) {
+          g.fillStyle = `rgba(${60 + r() * 60},${55 + r() * 50},${50 + r() * 40},${0.08 + r() * 0.18})`
+          const s = 0.8 + r() * 2.6
+          g.beginPath()
+          g.ellipse(a * P + r() * P, b * P + r() * P, s, s * (0.6 + r() * 0.4), r() * 3, 0, Math.PI * 2)
+          g.fill()
+        }
+        for (let i = 0; i < 3; i++) {
+          g.fillStyle = `rgba(90,80,65,${0.04 + r() * 0.06})`
+          g.beginPath()
+          g.ellipse(a * P + r() * P, b * P + r() * P, 20 + r() * 50, 10 + r() * 30, r() * 3, 0, Math.PI * 2)
+          g.fill()
+        }
+        g.fillStyle = 'rgba(50,45,40,0.55)'
+        for (const f of [0.3, 0.7]) {
+          g.beginPath()
+          g.arc(a * P + f * P, b * P + P / 2, 4, 0, Math.PI * 2)
+          g.fill()
+        }
+        g.fillStyle = 'rgba(35,32,28,0.7)'
+        g.fillRect(a * P, b * P, P, 4)
+        g.fillRect(a * P, b * P, 4, P)
+      }
   } else if (kind === 'brushed') {
     for (let y = 0; y < S; y++) {
       g.fillStyle = `rgba(0,0,0,${r() * 0.07})`
@@ -103,7 +135,7 @@ function pattern(kind) {
   }
   const t = new THREE.CanvasTexture(cv)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
-  t.repeat.set(0.5, 0.5) // the pattern covers 2 × 2 m
+  t.repeat.set(kind === 'gdr' ? 1 / 2.4 : 0.5, kind === 'gdr' ? 1 / 2.4 : 0.5) // the pattern covers 2 × 2 m (GDR plates: 2.4 × 2.4 m)
   t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 8
   patterns[kind] = t
