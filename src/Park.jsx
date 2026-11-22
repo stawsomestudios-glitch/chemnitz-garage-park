@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
 import * as THREE from 'three'
+import { MODEL_TREE_COLOUR, modelTree } from './modelTree.js'
 import { ground } from './terrain.js'
 import { makeMaterial } from './materials.js'
 
@@ -39,25 +40,18 @@ function Columns({ list }) {
   )
 }
 
+// trees growing up through the openings: white model trees, the crown starting above the deck
 function Trees({ list }) {
-  return list.map((t) => {
-    const up = Math.max(t.deck - t.g + 3, 5)
-    const R = Math.max(2.2, t.r * 1.5)
+  return list.map((t, i) => {
+    const below = Math.max(0, t.deck - t.g) // trunk under the deck
+    const W = Math.max(4.5, t.r * 3)
+    const crown = W * 1.25 // crown height
+    const H = below + 1.2 + crown
+    const geo = modelTree(Math.round(((below + 1.2) / H) * 50) / 50, i + 2)
     return (
-      <group key={t.id} position={[t.x, t.g, -t.y]} userData={{ layer: 'Park - trees' }}>
-        <mesh position={[0, up / 2, 0]} castShadow>
-          <cylinderGeometry args={[0.22, 0.32, up, 10]} />
-          <meshStandardMaterial color="#7a5b3e" roughness={0.9} />
-        </mesh>
-        <mesh position={[0, up + R * 0.55, 0]} castShadow>
-          <sphereGeometry args={[R, 18, 12]} />
-          <meshStandardMaterial color="#7fa65a" roughness={0.9} />
-        </mesh>
-        <mesh position={[R * 0.35, up + R * 0.95, R * 0.2]} castShadow>
-          <sphereGeometry args={[R * 0.62, 16, 10]} />
-          <meshStandardMaterial color="#8db866" roughness={0.9} />
-        </mesh>
-      </group>
+      <mesh key={t.id} geometry={geo} position={[t.x, t.g, -t.y]} scale={[W, H, W]} castShadow receiveShadow userData={{ layer: 'Park - trees' }}>
+        <meshStandardMaterial color={MODEL_TREE_COLOUR} roughness={0.95} />
+      </mesh>
     )
   })
 }

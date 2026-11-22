@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { modelTree } from './modelTree.js'
 import { GARAGE_POINTS, KINDS, carColour, carParts, dims, localAnchors, magnet, snapPoint, toWorld } from './elements.js'
 import { TITLE } from './titles.js'
 import { COBALT, RIBBON_KINDS, buildModule } from './ribbon.js'
@@ -24,6 +25,8 @@ const GEO = {
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 20),
   ball: new THREE.SphereGeometry(0.5, 20, 14),
   cone: new THREE.ConeGeometry(0.5, 1, 24),
+  mtree: modelTree(0.4, 3), // white model tree, standing on its base (see src/modelTree.js)
+  mtree2: modelTree(0.34, 11),
 }
 const GROUND = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 const up = new THREE.Vector3()

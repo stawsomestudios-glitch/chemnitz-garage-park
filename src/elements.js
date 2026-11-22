@@ -79,8 +79,8 @@ export const KINDS = {
     parts: (c) => [cyl([0, 1.2, 0], [0.06, 2.4, 0.06], '#4a4d52'), { g: 'cone', p: [0, 2.45, 0], s: [2.6, 0.55, 2.6], c }, cyl([0, 0.05, 0], [0.5, 0.1, 0.5], '#4a4d52')],
   },
   tree: {
-    name: 'Tree', size: 'Ø 4.5', w: 4.5, d: 4.5, colour: '#7fa65a',
-    parts: (c) => [cyl([0, 1.4, 0], [0.3, 2.8, 0.3], '#7a5b3e'), { g: 'ball', p: [0, 4, 0], s: [4.2, 3.8, 4.2], c }, { g: 'ball', p: [0.7, 4.9, 0.3], s: [2.6, 2.4, 2.6], c: '#8db866' }],
+    name: 'Tree', size: 'Ø 4.5, 7 high', w: 4.5, d: 4.5, colour: '#f3f1ec',
+    parts: (c) => [{ g: 'mtree', p: [0, 0, 0], s: [4.5, 7, 4.5], c, rough: 0.95 }],
   },
   planter: { name: 'Planter', size: '3 × 1', w: 3, d: 1, colour: '#9a948a', parts: (c) => [box([0, 0.3, 0], [3, 0.6, 1], c), box([0, 0.66, 0], [2.8, 0.16, 0.8], '#6f9a4c')] },
   bench: {
@@ -182,8 +182,8 @@ export const KINDS = {
   // ----- landscape -----
   pine: { name: 'Conifer', size: 'Ø 3, 7 high', w: 3, d: 3, colour: '#4f7a4a', parts: (c) => [cyl([0, 0.75, 0], [0.3, 1.5, 0.3], '#7a5b3e'), { g: 'cone', p: [0, 4.25, 0], s: [3, 5.5, 3], c }] },
   smalltree: {
-    name: 'Small tree', size: 'Ø 2.5', w: 2.5, d: 2.5, colour: '#93b56a',
-    parts: (c) => [cyl([0, 1, 0], [0.16, 2, 0.16], '#7a5b3e'), { g: 'ball', p: [0, 2.8, 0], s: [2.5, 2.2, 2.5], c }],
+    name: 'Small tree', size: 'Ø 2.5, 4 high', w: 2.5, d: 2.5, colour: '#f3f1ec',
+    parts: (c) => [{ g: 'mtree2', p: [0, 0, 0], s: [2.5, 4, 2.5], c, rough: 0.95 }],
   },
   bush: { name: 'Bush', size: 'Ø 1.6', w: 1.6, d: 1.6, colour: '#6f9a4c', parts: (c) => [{ g: 'ball', p: [0, 0.6, 0], s: [1.6, 1.2, 1.6], c }] },
   hedge: { name: 'Hedge', size: '3 × 0.8, 1.2 high', w: 3, d: 0.8, colour: '#5f8a43', parts: (c) => [box([0, 0.6, 0], [3, 1.2, 0.8], c)] },
@@ -239,8 +239,8 @@ export const ELEMENT_GROUPS = [
   ['Signs', ['streetsign', 'trafficsign', 'signpost', 'infoboard']],
 ]
 // Height of each element in metres, used for sizes, stacking and connect points.
-const HEIGHTS = { stall: 2.45, stallopen: 1.04, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 6.1, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
-  tram: 4.03, tramtrack: 0.09, tramstop: 3.0, bus: 3.1, pine: 7, smalltree: 3.9, bush: 1.2, hedge: 1.2, flowers: 0.57, lawn: 0.04, paving: 0.04, pond: 0.04, boulder: 0.7,
+const HEIGHTS = { stall: 2.45, stallopen: 1.04, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 7, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
+  tram: 4.03, tramtrack: 0.09, tramstop: 3.0, bus: 3.1, pine: 7, smalltree: 4, bush: 1.2, hedge: 1.2, flowers: 0.57, lawn: 0.04, paving: 0.04, pond: 0.04, boulder: 0.7,
   bollard: 0.9, bikerack: 0.88, bin: 0.95, streetsign: 2.8, trafficsign: 2.5, signpost: 2.6, infoboard: 2.0 }
 for (const k in KINDS) KINDS[k].h = HEIGHTS[k]
 export const KIND_IDS = Object.keys(KINDS).filter((k) => !KINDS[k].hidden)

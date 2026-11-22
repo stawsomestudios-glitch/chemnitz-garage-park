@@ -70,3 +70,5 @@ The park is a list of blobs (`park.outlines`; old plans with one `outline` are r
 Note: `node_modules` here is a link to `../garage-blocks/node_modules` (the disk is nearly full); do not run `npm install` in this folder without replacing that link first.
 
 Removed garages: `plan.roofs[id] = 'gone'` (button "Remove garage" in the selection panel, next to the roof modes). `Garages` in `src/Scene.jsx` leaves them out; `src/Roofs.jsx` draws a grey clickable pad in their place (to pick and bring them back) and the outer outline of all removed garages together (polygon-clipping union) as a dotted black volume. `prepBuildings(site, goneGarages)` hangs the set on the list so `roofAt` no longer counts them as roofs.
+
+Trees: white architectural-model trees from `src/modelTree.js` (`modelTree(crownFrom, seed)`, a merged unit-size geometry: trunk, branches, faceted clumps). Used by the Tree / Small tree elements (`mtree`, `mtree2` in `GEO`, `src/Elements.jsx`) and the park trees in the openings (`Trees` in `src/Park.jsx`, crown starting above the deck).
