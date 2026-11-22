@@ -899,6 +899,34 @@ export default function App() {
         e.preventDefault()
         return
       }
+      // ↑ / ↓ raise or lower the design (10 cm, with Shift 1 m); the buildings and garages keep their real heights
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 1 : 0.1)
+        const r2 = (v) => Math.round(v * 100) / 100
+        if (parkEdit && parkSel?.t === 'h') {
+          const q = park.heights.find((x) => x.id === parkSel.id)
+          if (q) {
+            const h = r2(Math.min(q.roof ? 20 : 60, Math.max(0, q.h + d)))
+            setPark((pk) => ({ ...pk, heights: pk.heights.map((x) => (x.id === q.id ? { ...x, h } : x)) }), 'park-h:' + q.id)
+            setNote(q.roof ? `Height point: ${h.toFixed(2)} m above the roof below` : `Height point: ${h.toFixed(2)} m above the ground`)
+          }
+          e.preventDefault()
+          return
+        }
+        if (parkEdit && !parkSel) {
+          // the whole deck, except the points that sit on roofs (they stay on the buildings)
+          setPark((pk) => ({ ...pk, heights: pk.heights.map((x) => (x.roof ? x : { ...x, h: r2(Math.min(60, Math.max(0, x.h + d))) })) }), 'park-all')
+          setNote(`The deck ${d > 0 ? 'up' : 'down'} ${Math.abs(d) < 1 ? '10 cm' : '1 m'} (points on roofs stay on the roofs)`)
+          e.preventDefault()
+          return
+        }
+        if (selItems.length) {
+          changeItems((it) => ({ ...it, z: r2(Math.max(0, it.z + d)) }), 'items-z')
+          setNote(`${selItems.length === 1 ? 'Element' : selItems.length + ' elements'} ${d > 0 ? 'up' : 'down'}: ${r2(Math.max(0, selItems[0].z + d)).toFixed(2)} m above the ground`)
+          e.preventDefault()
+          return
+        }
+      }
       if (parkEdit && parkSel && (e.key === 'Delete' || e.key === 'Backspace')) {
         selectPark(parkSel, true)
         e.preventDefault()
@@ -1476,6 +1504,9 @@ export default function App() {
                   <div className="park-edit">
                     <p className="muted small">
                       Drag the <b>white squares</b> to move the edge; click a <b>grey diamond</b> to add an edge point. Drag a <b>ball</b> to move a height point (purple: it sits on a roof). Drag a <b>green dot</b> to move an opening. Shift-click any of them, or select it and press Delete, to take it out.
+                    </p>
+                    <p className="muted small">
+                      <b>↑ / ↓</b> raise or lower the selected height point by 10 cm (with Shift: 1 m). With nothing selected they move the whole deck; points on roofs stay on the roofs. The buildings keep their real heights.
                     </p>
                     <div className="actions">
                       <button className={placing === 'h' ? 'on' : ''} onClick={() => setPlacing(placing === 'h' ? null : 'h')}>+ Height point</button>
