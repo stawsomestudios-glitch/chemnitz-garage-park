@@ -423,7 +423,7 @@ export default function App() {
       return { ...p, bcut: c }
     }, 'bcut:' + i)
     const h = Math.max(0.6, site.buildings[i].h - n * LEVEL)
-    setNote(`Building ${h.toFixed(2)} m high${n ? ` (${(n * LEVEL).toFixed(2)} m lower than now: ${n} step${n > 1 ? 's' : ''} of 1.20 m)` : ' (its real height)'}`)
+    setNote(`Building ${h.toFixed(2)} m high${n ? ` (${(n * LEVEL).toFixed(2)} m below its real height: ${n} step${n > 1 ? 's' : ''} of 1.20 m)` : ' (its real height)'}`)
   }
   const parkBuildings = useMemo(() => (siteAdj ? prepBuildings(siteAdj) : []), [siteAdj])
   const parkBuilt = useMemo(() => (site && park.on ? buildPark(park, parkBuildings) : null), [park, parkBuildings, topo]) // eslint-disable-line react-hooks/exhaustive-deps
