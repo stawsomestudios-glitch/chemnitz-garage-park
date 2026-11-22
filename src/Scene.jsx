@@ -360,13 +360,14 @@ function LabelTracker({ items, refs }) {
 // One label per locked block, or per single garage, per ribbon piece and per labelled element. Selected ones first, so they are never hidden.
 // show = { garages: 'titles' | 'numbers' | 'both' | 'off', ribbon: 'names' | 'numbers' | 'both' | 'off', elements: true | false }
 // Your own texts: glabel (garage id -> text), piece.label on ribbon pieces, it.label on elements. `edit` says what a double-click changes.
-function useItems({ title, block, picked, show, glabel, items, tags, chosen, active, pass, topo }) {
+function useItems({ title, block, picked, show, glabel, items, tags, chosen, active, pass, topo, roofs }) {
   return useMemo(() => {
     const list = []
     if (show.garages !== 'off') {
       const groups = new Map()
       for (const g of GARAGES) {
         if (pass?.ids.has(g.id)) continue // the ribbon's own tag names these
+        if (roofs?.[g.id] === 'gone') continue // removed: only its dotted outline is left
         const k = block[g.id] ?? g.id
         if (!groups.has(k)) groups.set(k, [])
         groups.get(k).push(g)
@@ -419,7 +420,7 @@ function useItems({ title, block, picked, show, glabel, items, tags, chosen, act
       }
     const order = (x) => x.order ?? BY_ID[x.first].i
     return list.sort((a, b) => a.rank - b.rank || order(a) - order(b))
-  }, [title, block, picked, show, glabel, items, tags, chosen, active, pass, topo])
+  }, [title, block, picked, show, glabel, items, tags, chosen, active, pass, topo, roofs])
 }
 
 // The cut tool: click a first point and a second point; the line between them cuts (the park, or a building)
@@ -640,7 +641,7 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
     builtDrawn.forEach(({ d, built: b }, n) => b.tags.forEach((t) => out.push({ ...t, rid: d.id, label: d.pieces[t.i]?.label, prefix: `D${n + 1}.` })))
     return out
   }, [built, builtDrawn, ribbon.pieces])
-  const tags = useItems({ title, block, picked, show, glabel, items, tags: allTags, chosen, active, pass, topo })
+  const tags = useItems({ title, block, picked, show, glabel, items, tags: allTags, chosen, active, pass, topo, roofs })
   const passive = !!connect || !!wand || !!placing || !!liftDraw || !!cutMode
   const refs = useRef([])
   const down = useRef([0, 0])
