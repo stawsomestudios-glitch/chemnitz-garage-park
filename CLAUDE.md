@@ -60,3 +60,5 @@ Lifted roofs and areas: `plan.lifts` (`src/lifts.js`, `src/Lifts.jsx`): fields o
 Opened roofs: `plan.roofs` ({ garage id: `tilt` | `frame` | `open` }; missing = closed) and `plan.roofColour`. `src/Roofs.jsx` draws opened garages from walls and door (they leave the solid boxes in `Garages`), plus a light steel frame and a roof plate hinged up 35° (`tilt`), the frame only (`frame`), or nothing (`open`). The Roof switch is in the selection panel (works on whole blocks); counts, colour, Close all in the Lifted roofs and areas section.
 
 Plate fields can have a timber grid frame (`grid`: beams under every 1.20 m joint, posts every `postEvery` plates) instead of steel supports, and open bays (`gaps`: none / stripes / checker / scatter). Field L4 is the market roof on the plaza.
+
+Building heights: `plan.bcut` ({ building number in site.json: steps of 1.20 m lower }). `siteAdj` in `src/App.jsx` is the site with those heights; it feeds the Scene and `prepBuildings`, so the park and lifted roofs follow lowered roofs. Click a building (Context in `src/Scene.jsx`, picked one glows orange), then ↓ / ↑ or the panel buttons; never above its real height.

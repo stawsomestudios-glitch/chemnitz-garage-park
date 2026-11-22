@@ -69,7 +69,7 @@ function ribbon(lines, width, y) {
 }
 
 // Streets, paths, green and the surrounding buildings. The mapped garages of the site are left out: our boxes replace them.
-function Context({ site, look, topo }) {
+function Context({ site, look, topo, onPickBuilding, bSel, passive }) {
   const geo = useMemo(() => {
     const build = (test) => {
       const list = site.buildings.filter(test).map((b) => seatBuilding(prism(b.p, b.h), b.p, b.h))
@@ -94,15 +94,27 @@ function Context({ site, look, topo }) {
     }
   }, [site, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // the real ground, with the map painted on it (redrawn when the colours change)
-  const land = useMemo(() => (topoOn() ? terrainMesh(site, look) : null), [site, look, topo]) // eslint-disable-line react-hooks/exhaustive-deps
+  const land = useMemo(() => (topoOn() ? terrainMesh(site, look) : null), [site.areas, site.lines, look, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => {
     land?.geo.dispose()
     land?.tex.dispose()
   }, [land])
   // flat styles (Nolli) show the map as a printed plan: pure colours, no light and shade
+  // which building a click landed on (by its plan position)
+  const pickAt = (e) => {
+    if (passive || e.delta > 6 || !onPickBuilding) return
+    const x = e.point.x
+    const y = -e.point.z
+    const i = site.buildings.findIndex((b) => b.kind !== 'garage' && inside([x, y], b.p))
+    if (i < 0) return
+    e.stopPropagation()
+    onPickBuilding(i)
+  }
+  const sel = bSel != null ? site.buildings[bSel] : null
+  const selGeo = useMemo(() => (sel ? seatBuilding(prism(sel.p, sel.h + 0.05), sel.p, sel.h + 0.05) : null), [sel, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   const m = (g, color, double, layer) =>
     g && (
-      <mesh geometry={g} receiveShadow castShadow={double === 'cast' && look.shadows} userData={{ layer: `Context - ${layer}` }}>
+      <mesh geometry={g} receiveShadow castShadow={double === 'cast' && look.shadows} userData={{ layer: `Context - ${layer}` }} onClick={double === 'cast' ? pickAt : undefined}>
         {look.flat ? (
           <meshBasicMaterial color={color} toneMapped={false} side={double === true ? THREE.DoubleSide : THREE.FrontSide} />
         ) : (
@@ -130,6 +142,11 @@ function Context({ site, look, topo }) {
       {m(geo.path, look.path, true, 'footpaths')}
       {m(geo.tram, look.tram, true, 'tram')}
       </>}
+      {selGeo && (
+        <mesh geometry={selGeo} renderOrder={3} raycast={() => null} userData={{ noExport: true }}>
+          <meshBasicMaterial color="#ff7a1a" transparent opacity={0.35} depthWrite={false} />
+        </mesh>
+      )}
       {m(geo.home, look.home, 'cast', 'homes')}
       {m(geo.other, look.other, 'cast', 'other buildings')}
       {m(geo.garage, look.garage, 'cast', 'other garages')}
@@ -477,7 +494,7 @@ function Wand({ wand, onWand }) {
   )
 }
 
-export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings, roofs = {}, roofColour = '#c0392b' }) {
+export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings, roofs = {}, roofColour = '#c0392b', onPickBuilding, bSel }) {
   const built = useMemo(() => (ribbon.on ? buildRibbon(ribbon, undefined, ground) : null), [ribbon, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // the ribbons you drew with the magic wand, each along its own line
   const builtDrawn = useMemo(() => drawn.map((d) => ({ d, built: buildRibbon(d, d.route, ground) })), [drawn, topo]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -531,7 +548,7 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
           shadow-bias={-0.0006}
           shadow-normalBias={0.05}
         />
-        <Context site={site} look={look} topo={topo} />
+        <Context site={site} look={look} topo={topo} onPickBuilding={onPickBuilding} bSel={bSel} passive={passive || !!parkEdit || !!plazaEdit} />
         <Garages title={title} block={block} picked={picked} onPick={onPick} connecting={passive} pass={pass} look={look} topo={topo} roofs={roofs} />
         <Roofs roofs={roofs} title={title} picked={picked} onPick={onPick} connecting={passive} look={look} colour={roofColour} topo={topo} />
         {pass && <Passages pass={pass} look={look} topo={topo} />}

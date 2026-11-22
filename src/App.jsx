@@ -118,7 +118,8 @@ function clean(s) {
   return { title, block, items, // a plan saved before the plate grid existed: its deck becomes reused GDR plates once
     park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS,
     roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open'].includes(m))) : DEFAULT_ROOFS,
-    roofColour: parseColour(s.roofColour) ?? '#c0392b', ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
+    roofColour: parseColour(s.roofColour) ?? '#c0392b',
+    bcut: Object.fromEntries(Object.entries(s.bcut ?? {}).filter(([i, n]) => Number.isInteger(+i) && Number.isInteger(+n) && +n > 0).map(([i, n]) => [i, +n])), ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
 }
 function cleanLayers(list) {
   const seen = new Set()
@@ -407,7 +408,24 @@ export default function App() {
   const [parkSel, setParkSel] = useState(null) // { t: 'p' edge point (id = number) | 'h' height point | 'o' opening, id }
   const [placing, setPlacing] = useState(null) // 'h' height point, 't' opening with a tree, 'o' light well
   const setPark = (fn, key) => setPlan((p) => ({ ...p, park: fn(p.park ?? DEFAULT_PARK) }), key)
-  const parkBuildings = useMemo(() => (site ? prepBuildings(site) : []), [site])
+  // buildings lowered in steps of 1.20 m (one plate): plan.bcut = { building number: steps down }
+  const LEVEL = 1.2
+  const bcut = plan.bcut ?? {}
+  const [bSel, setBSel] = useState(null)
+  const siteAdj = useMemo(() => site && { ...site, buildings: site.buildings.map((b, i) => (bcut[i] ? { ...b, h: Math.max(0.6, Math.round((b.h - bcut[i] * LEVEL) * 100) / 100) } : b)) }, [site, bcut])
+  const maxCut = (i) => (site ? Math.max(0, Math.ceil((site.buildings[i].h - 0.6) / LEVEL) - 1) : 0)
+  const cutBuilding = (i, steps) => {
+    const n = Math.max(0, Math.min(maxCut(i), (bcut[i] ?? 0) + steps))
+    setPlan((p) => {
+      const c = { ...(p.bcut ?? {}) }
+      if (n) c[i] = n
+      else delete c[i]
+      return { ...p, bcut: c }
+    }, 'bcut:' + i)
+    const h = Math.max(0.6, site.buildings[i].h - n * LEVEL)
+    setNote(`Building ${h.toFixed(2)} m high${n ? ` (${(n * LEVEL).toFixed(2)} m lower than now: ${n} step${n > 1 ? 's' : ''} of 1.20 m)` : ' (its real height)'}`)
+  }
+  const parkBuildings = useMemo(() => (siteAdj ? prepBuildings(siteAdj) : []), [siteAdj])
   const parkBuilt = useMemo(() => (site && park.on ? buildPark(park, parkBuildings) : null), [park, parkBuildings, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // ----- the city plaza -----
   const plaza = plan.plaza ?? DEFAULT_PLAZA
@@ -921,6 +939,11 @@ export default function App() {
         return
       }
       // ↑ / ↓ raise or lower the design (10 cm, with Shift 1 m); the buildings and garages keep their real heights
+      if (bSel != null && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        cutBuilding(bSel, e.key === 'ArrowDown' ? 1 : -1)
+        e.preventDefault()
+        return
+      }
       if (liftSel && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? PLATE : 0.1)
         const l = lifts.find((x) => x.id === liftSel)
@@ -1109,7 +1132,8 @@ export default function App() {
     <div className="app">
       <main className="stage">
         <Scene
-          site={site} title={title} block={block} picked={picked} onPick={pick} onClear={() => {
+          site={siteAdj} bSel={bSel} onPickBuilding={(i) => { setBSel(i); setLiftSel(null); setParkSel(null) }} title={title} block={block} picked={picked} onPick={pick} onClear={() => {
+            setBSel(null)
             if (connect || wand) return
             setPicked(new Set())
             setChosen(null)
@@ -1521,6 +1545,34 @@ export default function App() {
               </button>
               <button disabled={!selBlocks.size} onClick={unlock}>Unlock</button>
               <button disabled={!sel.length && !selItems.length} onClick={() => setPicked(new Set())}>Deselect</button>
+            </div>
+          </section>
+
+          <section className="park-panel">
+            <h2><span className="dot" style={{ background: '#9aa3a8' }} /> Building heights</h2>
+            <p className="muted">Click a building in the model to pick it, then lower it in steps of 1.20 m (one plate) with ↓, or the buttons. ↑ raises it again, up to its real height. The park and lifted roofs on it follow its roof.</p>
+            {bSel != null && site?.buildings[bSel] && (() => {
+              const real = site.buildings[bSel].h
+              const n = bcut[bSel] ?? 0
+              const now = Math.max(0.6, real - n * LEVEL)
+              return (
+                <div className="park-sel">
+                  <b>Picked building</b> <span className="muted small">real height {real.toFixed(1)} m (about {Math.max(1, Math.round((real - 1) / 3))} floors)</span>
+                  <p className="park-stats">
+                    <span>now <b>{now.toFixed(2)}</b> m</span>
+                    {n > 0 && <span><b>{(n * LEVEL).toFixed(2)}</b> m lower ({n} × 1.20 m)</span>}
+                  </p>
+                  <div className="actions">
+                    <button className="primary" disabled={n >= maxCut(bSel)} onClick={() => cutBuilding(bSel, 1)}>− 1.20 m</button>
+                    <button disabled={!n} onClick={() => cutBuilding(bSel, -1)}>+ 1.20 m</button>
+                    <button disabled={!n} onClick={() => cutBuilding(bSel, -n)}>Real height</button>
+                  </div>
+                </div>
+              )
+            })()}
+            <div className="actions">
+              <span className="muted small">{Object.keys(bcut).length} building{Object.keys(bcut).length === 1 ? '' : 's'} lowered</span>
+              <button disabled={!Object.keys(bcut).length} onClick={() => setPlan((p) => ({ ...p, bcut: {} }))}>All back to real height</button>
             </div>
           </section>
 
