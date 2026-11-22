@@ -21,14 +21,14 @@ const DEFAULT_MAP = { style: 'current', colours: {}, topo: 'real' }
 // Element layers: { id, name, on (shown), locked }. An element carries `layer`; without one it is on the first layer.
 const DEFAULT_LAYERS = [{ id: 'l1', name: 'Layer 1', on: true, locked: false }]
 // The market under the park roof: stalls in the courtyard between the two slabs on Richard-Wagner-Straße
-const STALLS = [[-54, 116], [-48, 116], [-36, 116.5], [-30, 117], [-24, 118], [-18, 119], [-12, 120], [-40, 123.5], [-34, 124.5], [-28, 125.5], [-16, 127.5], [-10, 128.5]].map(([x, y], i) => ({ id: 'stall' + (i + 1), kind: 'stall', x, y, z: 0, rot: 11, layer: 'lm' }))
+const STALLS = [[-54, 116], [-48, 116], [-36, 116.5], [-30, 117], [-24, 118], [-18, 119], [-12, 120], [-40, 123.5], [-34, 124.5], [-28, 125.5], [-16, 127.5], [-10, 128.5]].map(([x, y], i) => ({ id: 'stall' + (i + 1), kind: 'stallopen', x, y, z: 0, rot: 11, layer: 'lm' })) // under the park roof: no shade of their own
 // The open market on the city plaza: two rows of stalls in front of the shops of the southern slab,
 // trees along the garages, cafe parasols by Richard-Wagner-Straße, and shared-space signs where cars come in.
 const face = (x) => 83 + 0.195 * (x + 57.7) // the plaza front of the southern slab
 const PLAZA_ITEMS = [
   ...[-50, -44, -38, -32, -26, -20, -14, -8].flatMap((x, i) => [
     { id: 'pm' + i + 'a', kind: 'stall', x, y: face(x) - 9, z: 0, rot: 11, layer: 'lp' },
-    { id: 'pm' + i + 'b', kind: 'stall', x: x + 3, y: face(x + 3) - 16, z: 0, rot: 191, layer: 'lp' },
+    { id: 'pm' + i + 'b', kind: i % 2 ? 'stall' : 'stallopen', x: x + 3, y: face(x + 3) - 16, z: 0, rot: 191, layer: 'lp' },
   ]),
   ...[[-30, 15], [-20, 23.5], [-10, 32], [0, 41]].map(([x, y], i) => ({ id: 'pt' + i, kind: 'tree', x, y, z: 0, rot: 0, layer: 'lp' })),
   ...[[-49, 59], [-44, 54], [-50, 52]].map(([x, y], i) => ({ id: 'pp' + i, kind: 'parasol', x, y, z: 0, rot: 0, layer: 'lp' })),
@@ -1476,6 +1476,11 @@ export default function App() {
                 <button onClick={() => rotate(15)}>Turn 15°</button>
                 <button onClick={duplicate}>Copy</button>
                 <button onClick={() => changeItems((it) => ({ ...it, z: 0 }))}>To ground</button>
+                {selItems.every((it) => it.kind === 'stall' || it.kind === 'stallopen') && (
+                  <button onClick={() => { const shade = !selItems.every((it) => it.kind === 'stall'); changeItems((it) => (({ col, ...r }) => ({ ...r, kind: shade ? 'stall' : 'stallopen' }))(it)) }} title="Give the stall its own shade roof, or take it off">
+                    {selItems.every((it) => it.kind === 'stall') ? 'Shade off' : 'Shade on'}
+                  </button>
+                )}
                 <button className="danger" onClick={removeItems}>Delete</button>
               </div>
             )}

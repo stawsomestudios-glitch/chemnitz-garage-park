@@ -29,12 +29,24 @@ export const KINDS = {
   module: { name: 'Garage block', size: '3 × 6 × 3', w: 3, d: 6, titled: true, colour: '#e3ded3', parts: (c) => [box([0, 1.5, 0], [3, 3, 6], c, { stack: true }), door(3, 6)] },
   half: { name: 'Half block', size: '3 × 3 × 3', w: 3, d: 3, titled: true, colour: '#e3ded3', parts: (c) => [box([0, 1.5, 0], [3, 3, 3], c, { stack: true }), door(3, 3)] },
   stall: {
-    name: 'Market stall', size: '3 × 2.4', w: 3, d: 2.4, colour: '#c9473d',
+    name: 'Market stall with shade', size: '3 × 2.4', w: 3, d: 2.4, colour: '#c9473d',
     parts: (c) => [
       box([0, 0.45, 0.55], [2.8, 0.9, 0.8], '#b58b5a', { stack: true }),
       box([0, 0.97, 0.55], [2.6, 0.14, 0.6], '#e8c15a'),
       ...[[-1.4, -1.1], [1.4, -1.1], [-1.4, 1.1], [1.4, 1.1]].map(([x, z]) => cyl([x, 1.15, z], [0.06, 2.3, 0.06], '#4a4d52')),
       box([0, 2.35, 0], [3.1, 0.06, 2.7], c, { r: [0.14, 0, 0] }),
+    ],
+  },
+  // the same stall without its own shade: for under the park roof, a plate canopy or a tree
+  stallopen: {
+    name: 'Market stall, no shade', size: '3 × 2.4', w: 3, d: 2.4, colour: '#b58b5a',
+    parts: (c) => [
+      box([0, 0.45, 0.55], [2.8, 0.9, 0.8], c, { stack: true }),
+      box([-0.7, 0.97, 0.55], [1.2, 0.14, 0.6], '#e8c15a'),
+      box([0.7, 0.97, 0.55], [1.2, 0.14, 0.6], '#7fa65a'),
+      box([0, 0.38, -0.7], [2.4, 0.76, 0.6], c),
+      box([-0.6, 0.85, -0.7], [0.6, 0.18, 0.4], '#c9473d'),
+      box([0.4, 0.85, -0.7], [0.6, 0.18, 0.4], '#e09a3e'),
     ],
   },
   kiosk: {
@@ -220,14 +232,14 @@ export const KINDS = {
 
 // The groups the Add elements palette shows them in.
 export const ELEMENT_GROUPS = [
-  ['Build', ['stall', 'kiosk', 'deck', 'stairs', 'ramp', 'bridge', 'bridgelegs', 'wall', 'shade', 'pergola', 'parasol']],
+  ['Build', ['stall', 'stallopen', 'kiosk', 'deck', 'stairs', 'ramp', 'bridge', 'bridgelegs', 'wall', 'shade', 'pergola', 'parasol']],
   ['Transport and people', ['tram', 'tramtrack', 'tramstop', 'bus', 'car', 'person']],
   ['Landscape', ['tree', 'smalltree', 'pine', 'bush', 'hedge', 'planter', 'flowers', 'lawn', 'paving', 'pond', 'boulder']],
   ['Street furniture', ['bench', 'table', 'lamp', 'bollard', 'bikerack', 'bin']],
   ['Signs', ['streetsign', 'trafficsign', 'signpost', 'infoboard']],
 ]
 // Height of each element in metres, used for sizes, stacking and connect points.
-const HEIGHTS = { stall: 2.45, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 6.1, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
+const HEIGHTS = { stall: 2.45, stallopen: 1.04, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 6.1, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
   tram: 4.03, tramtrack: 0.09, tramstop: 3.0, bus: 3.1, pine: 7, smalltree: 3.9, bush: 1.2, hedge: 1.2, flowers: 0.57, lawn: 0.04, paving: 0.04, pond: 0.04, boulder: 0.7,
   bollard: 0.9, bikerack: 0.88, bin: 0.95, streetsign: 2.8, trafficsign: 2.5, signpost: 2.6, infoboard: 2.0 }
 for (const k in KINDS) KINDS[k].h = HEIGHTS[k]
