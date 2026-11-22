@@ -8,6 +8,7 @@ import { TOPO_MODES, ground, setTerrain, setTopo } from './terrain.js'
 import { DEFAULT_PARK, buildPark, cleanPark, newParkId, prepBuildings, roofAt } from './park.js'
 import { DEFAULT_PLAZA, buildPlaza, cleanPlaza } from './plaza.js'
 import { DEFAULT_LIFTS, PLATE, buildLifts, cleanLifts } from './lifts.js'
+import { ROOF_MODES } from './Roofs.jsx'
 import { sectionGeom, sideName } from './Views.jsx'
 import ColourField, { parseColour } from './ColourField.jsx'
 import { colourOf } from './Elements.jsx'
@@ -35,8 +36,10 @@ const PLAZA_ITEMS = [
   ...[[-49, 59], [-44, 54], [-50, 52]].map(([x, y], i) => ({ id: 'ptb' + i, kind: 'table', x, y, z: 0, rot: 0, layer: 'lp' })),
   ...[[-46, 12], [-47, 27], [27, 71], [17, 86]].map(([x, y], i) => ({ id: 'ps' + i, kind: 'trafficsign', x, y, z: 0, rot: 0, layer: 'lp', label: i === 0 ? 'Shared space · 10 km/h · pedestrians first' : undefined })),
 ].map((it) => (it.label ? it : (({ label, ...r }) => r)(it)))
+// Opened garage roofs to start with: rows R2 and R3 as a sawtooth of tilted plates, R4 frame only, R5 removed
+const DEFAULT_ROOFS = Object.fromEntries(GARAGES.filter((g) => ['R2', 'R3', 'R4', 'R5'].includes(g.row)).map((g) => [g.id, g.row === 'R4' ? 'frame' : g.row === 'R5' ? 'open' : 'tilt']))
 // In this copy there is no ribbon (it is kept off) and no modules: the elevated park takes their place.
-const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: DEFAULT_PARK, plaza: DEFAULT_PLAZA, lifts: DEFAULT_LIFTS, ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
+const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: DEFAULT_PARK, plaza: DEFAULT_PLAZA, lifts: DEFAULT_LIFTS, roofs: DEFAULT_ROOFS, roofColour: '#c0392b', ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
 // the map layers you can recolour, in the order the Map section lists them
 const MAP_LAYERS = [
   ['bg', 'Sky / background'], ['ground', 'Ground'], ['green', 'Green areas'], ['parking', 'Parking'], ['site', 'Garage yard'],
@@ -113,7 +116,9 @@ function clean(s) {
       ...(v.section && Number.isFinite(+v.section.angle) ? { section: { angle: +v.section.angle, offset: +v.section.offset || 0, flip: !!v.section.flip } } : {}),
     }))
   return { title, block, items, // a plan saved before the plate grid existed: its deck becomes reused GDR plates once
-    park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS, ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
+    park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS,
+    roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open'].includes(m))) : DEFAULT_ROOFS,
+    roofColour: parseColour(s.roofColour) ?? '#c0392b', ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
 }
 function cleanLayers(list) {
   const seen = new Set()
@@ -422,7 +427,7 @@ export default function App() {
     setLiftSel(id)
     setNote(`${r.nu} × ${r.nv} plates laid ${r.roof ? 'as a lifted roof, 1.20 m above the roof' : 'as a canopy, 3.60 m above the ground'}. Lift it with ↑ / ↓ (Shift: one plate, 1.20 m).`)
   }
-  const liftPlates = lifts.reduce((a, l) => a + l.nu * l.nv, 0)
+  const liftPlates = liftsBuilt ? Object.values(liftsBuilt.info).reduce((a, x) => a + x.plates, 0) : 0
   // pick a handle, or (Shift-click / Delete) take it out
   const selectPark = (what, removeIt) => {
     if (!removeIt) return setParkSel(what)
@@ -1115,6 +1120,7 @@ export default function App() {
           connect={connect} onGrip={onGrip} onTarget={onTarget}
           ribbon={ribbon} chosen={chosenList} onPickPiece={pickPiece} look={look} topo={topo} ortho={ortho} section={section}
           drawn={[]} active={curId} wand={null} onWand={setWand} show={show} glabel={glabel} onEditLabel={editLabel}
+          roofs={plan.roofs ?? {}} roofColour={plan.roofColour ?? '#c0392b'}
           lifts={lifts} liftsBuilt={liftsBuilt} liftDraw={liftDraw} liftSel={liftSel} onLiftSel={(id) => { setLiftSel(id); setParkSel(null) }} onLifts={setLifts} onLiftCreate={createLift} buildings={parkBuildings}
           plaza={plaza} plazaBuilt={plazaBuilt} plazaEdit={plazaEdit} onPlaza={setPlaza}
           park={park} parkBuilt={parkBuilt} parkEdit={parkEdit} parkSel={parkSel} onParkSel={selectPark} onPark={setPark} placing={placing} onPlace={placeOnPark}
@@ -1487,6 +1493,28 @@ export default function App() {
             <label className="check">
               <input type="checkbox" checked={multi} onChange={(e) => setMulti(e.target.checked)} /> Add to selection on each click
             </label>
+            {sel.length > 0 && (() => {
+              const ids = withBlocks(sel)
+              const modes = new Set(ids.map((id) => plan.roofs?.[id] ?? 'closed'))
+              const one = modes.size === 1 ? [...modes][0] : null
+              return (
+                <div className="snaprow">
+                  <span>Roof{ids.length > 1 ? ` of all ${ids.length}` : ''}</span>
+                  <div className="seg-group small-seg" role="group" aria-label="Roof">
+                    {ROOF_MODES.map(([k, l]) => (
+                      <button
+                        key={k}
+                        className={one === k ? 'on' : ''}
+                        title={k === 'tilt' ? 'The roof plate hinged up on a light steel frame, for light and air' : k === 'frame' ? 'Roof plate off, the steel frame stays' : k === 'open' ? 'Roof off: open to the sky' : 'The usual closed roof'}
+                        onClick={() => setPlan((p) => { const r = { ...(p.roofs ?? {}) }; for (const id of ids) k === 'closed' ? delete r[id] : (r[id] = k); return { ...p, roofs: r } })}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
             <div className="actions">
               <button className="primary" disabled={withBlocks(sel).length < 2 || (selBlocks.size === 1 && sel.every((id) => block[id]))} onClick={lock}>
                 Lock together
@@ -1555,7 +1583,7 @@ export default function App() {
                 {lifts.map((l, k) => (
                   <li key={l.id}>
                     <button className={liftSel === l.id ? 'on' : ''} onClick={() => setLiftSel(liftSel === l.id ? null : l.id)}>
-                      <b>Field {k + 1}</b> {l.nu} × {l.nv} plates · {l.h.toFixed(2)} m {liftsBuilt?.info[l.id]?.onRoof ? 'above the roof' : l.roof ? 'up (no roof below)' : 'above the ground'}
+                      <b>Field {k + 1}</b> {l.nu} × {l.nv}{l.grid ? ' timber grid' : ''} · {l.h.toFixed(2)} m {liftsBuilt?.info[l.id]?.onRoof ? 'above the roof' : l.roof ? 'up (no roof below)' : 'above the ground'}
                     </button>
                   </li>
                 ))}
@@ -1567,7 +1595,7 @@ export default function App() {
               const setL = (patch, key) => setLifts((ls) => ls.map((x) => (x.id === l.id ? { ...x, ...patch } : x)), key)
               return (
                 <div className="park-sel">
-                  <b>Field {lifts.indexOf(l) + 1}</b> <span className="muted small">{l.nu * l.nv} plates, {(l.nu * PLATE).toFixed(2)} × {(l.nv * PLATE).toFixed(2)} m · ↑ / ↓ lift it, Delete removes it</span>
+                  <b>Field {lifts.indexOf(l) + 1}</b> <span className="muted small">{liftsBuilt?.info[l.id]?.plates ?? l.nu * l.nv} plates, {(l.nu * PLATE).toFixed(2)} × {(l.nv * PLATE).toFixed(2)} m · ↑ / ↓ lift it, Delete removes it</span>
                   <label className="check">
                     <input type="checkbox" checked={l.roof} onChange={(e) => setL({ roof: e.target.checked })} /> Lifted roof: stands on the roof below its middle
                   </label>
@@ -1577,8 +1605,23 @@ export default function App() {
                   <ParkVal label="Tilt along" value={l.tiltU} min={-30} max={30} step={1} unit="°" onChange={(v) => setL({ tiltU: v }, 'lift-tu:' + l.id)} />
                   <ParkVal label="Tilt across" value={l.tiltV} min={-30} max={30} step={1} unit="°" onChange={(v) => setL({ tiltV: v }, 'lift-tv:' + l.id)} />
                   <label className="check">
-                    <input type="checkbox" checked={l.supports} onChange={(e) => setL({ supports: e.target.checked })} /> Steel supports (every 6 plates, 7.20 m)
+                    <input type="checkbox" checked={l.grid} onChange={(e) => setL({ grid: e.target.checked })} /> Timber grid frame: beams on every 1.20 m joint
                   </label>
+                  {l.grid ? (
+                    <ParkVal label="Posts every" value={l.postEvery} min={1} max={10} step={1} unit="plates" onChange={(v) => setL({ postEvery: Math.round(v) }, 'lift-pe:' + l.id)} />
+                  ) : (
+                    <label className="check">
+                      <input type="checkbox" checked={l.supports} onChange={(e) => setL({ supports: e.target.checked })} /> Steel supports (every 6 plates, 7.20 m)
+                    </label>
+                  )}
+                  <div className="snaprow">
+                    <span>Open bays</span>
+                    <div className="seg-group small-seg" role="group" aria-label="Open bays">
+                      {[['none', 'None'], ['stripes', 'Stripes'], ['checker', 'Checker'], ['scatter', 'Scattered']].map(([k, t]) => (
+                        <button key={k} className={l.gaps === k ? 'on' : ''} onClick={() => setL({ gaps: k })}>{t}</button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="actions">
                     <button onClick={() => { const id = newParkId('L'); setLifts((ls) => [...ls, { ...l, id, i0: l.i0 + l.nu + 1 }]); setLiftSel(id) }}>Copy next to it</button>
                     <button className="danger" onClick={() => { setLifts((ls) => ls.filter((x) => x.id !== l.id)); setLiftSel(null) }}>Delete field</button>
@@ -1587,6 +1630,16 @@ export default function App() {
               )
             })()}
             <p className="muted small">The plate grid turns with the park's mesh direction (Elevated park section), so plates, deck joints and columns always line up.</p>
+            <h3>Opened garage roofs</h3>
+            <p className="muted small">Select garages (or a whole row) and choose their roof in the selection panel: Tilted open, Frame only, or Removed, to let light and air in.</p>
+            <p className="park-stats">
+              {ROOF_MODES.slice(1).map(([k, l]) => <span key={k}><b>{Object.values(plan.roofs ?? {}).filter((m) => m === k).length}</b> {l.toLowerCase()}</span>)}
+            </p>
+            <ColourField label="Frames and tilted plates" value={plan.roofColour ?? '#c0392b'} changed={(plan.roofColour ?? '#c0392b') !== '#c0392b'} onChange={(c) => setPlan((p) => ({ ...p, roofColour: c }), 'roofcol')} onReset={() => setPlan((p) => ({ ...p, roofColour: '#c0392b' }))} />
+            <div className="actions">
+              <button disabled={!Object.keys(plan.roofs ?? {}).length} onClick={() => setPlan((p) => ({ ...p, roofs: {} }))}>Close all roofs</button>
+              <button onClick={() => setPlan((p) => ({ ...p, roofs: DEFAULT_ROOFS }))}>Start again</button>
+            </div>
           </section>
 
           <section className="park-panel">

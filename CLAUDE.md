@@ -54,3 +54,9 @@ Layers: `plan.layers` ({ id, name, on, locked }, at least one); an element carri
 Everything is built from reused GDR prefab plates on one 1.20 × 1.20 m grid, turned by `park.netAngle` (11°, along the slabs) from the site origin. The park deck uses the material `gdr` (texture 2.4 m = 2 × 2 plates, texture coordinates turned with the grid in `buildPark`), joints = `net` 1.2, columns every `columns` 7.2 m on the same grid.
 
 Lifted roofs and areas: `plan.lifts` (`src/lifts.js`, `src/Lifts.jsx`): fields of separate plates `{ id, i0, j0, nu, nv, h, roof, tiltU, tiltV, supports }` in grid numbers. `roof: true` stands on the roof under the field's middle (`roofAt`), otherwise on the ground. ▦ Lift plates (top bar) draws a field by dragging (on a roof it becomes a lifted roof); click a field to select it, drag it to move it (snaps to the grid). Arrow keys: ↑ / ↓ lift the selected field (10 cm, Shift = 1.20 m), else the selected park height point, else the whole deck (roof points stay), else selected elements. Delete removes the selected field. Plans saved before the plates existed have their deck switched to `gdr` once (in `clean()`).
+
+## Opened garage roofs and the timber grid
+
+Opened roofs: `plan.roofs` ({ garage id: `tilt` | `frame` | `open` }; missing = closed) and `plan.roofColour`. `src/Roofs.jsx` draws opened garages from walls and door (they leave the solid boxes in `Garages`), plus a light steel frame and a roof plate hinged up 35° (`tilt`), the frame only (`frame`), or nothing (`open`). The Roof switch is in the selection panel (works on whole blocks); counts, colour, Close all in the Lifted roofs and areas section.
+
+Plate fields can have a timber grid frame (`grid`: beams under every 1.20 m joint, posts every `postEvery` plates) instead of steel supports, and open bays (`gaps`: none / stripes / checker / scatter). Field L4 is the market roof on the plaza.

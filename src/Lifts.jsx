@@ -10,6 +10,10 @@ import { roofAt } from './park.js'
 const PLATE_GEO = new THREE.BoxGeometry(PLATE - 0.02, PLATE_THICK, PLATE - 0.02)
 const SUPPORT = new THREE.CylinderGeometry(0.07, 0.07, 1, 8)
 SUPPORT.translate(0, 0.5, 0)
+const TIMBER = new THREE.BoxGeometry(1, 1, 1)
+const POST = new THREE.BoxGeometry(0.12, 1, 0.12)
+POST.translate(0, 0.5, 0)
+const X = new THREE.Vector3(1, 0, 0)
 const TONES = ['#bdb9b0', '#c7c2b6', '#aeaca6', '#c9bda6', '#b5b3ad', '#d0cbc0', '#b9ad98', '#a8a7a2'].map((c) => new THREE.Color(c))
 const PICK = new THREE.Color('#ff7a1a')
 const dummy = new THREE.Object3D()
@@ -19,6 +23,8 @@ export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreat
   const { controls } = useThree()
   const plates = useRef()
   const posts = useRef()
+  const beams = useRef()
+  const tposts = useRef()
   useLayoutEffect(() => {
     const m = plates.current
     if (!m) return
@@ -48,7 +54,40 @@ export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreat
     s.count = built.supports.length
     s.instanceMatrix.needsUpdate = true
     s.computeBoundingSphere()
-  }, [built, sel])
+    // the timber grid: each beam turned from its start to its end
+    const bm = beams.current
+    if (bm) {
+      const dir = new THREE.Vector3()
+      built.beams.forEach(([x1, y1, z1, x2, y2, z2], i) => {
+        dir.set(x2 - x1, z2 - z1, -(y2 - y1))
+        const L = dir.length()
+        dummy.position.set((x1 + x2) / 2, (z1 + z2) / 2, -(y1 + y2) / 2)
+        dummy.quaternion.setFromUnitVectors(X, dir.normalize())
+        dummy.scale.set(L + 0.08, 0.18, 0.08)
+        dummy.updateMatrix()
+        bm.setMatrixAt(i, dummy.matrix)
+      })
+      dummy.quaternion.identity()
+      dummy.scale.set(1, 1, 1)
+      bm.count = built.beams.length
+      bm.instanceMatrix.needsUpdate = true
+      bm.computeBoundingSphere()
+    }
+    const tp = tposts.current
+    if (tp) {
+      built.posts.forEach(([x, y, from, to], i) => {
+        dummy.position.set(x, from, -y)
+        dummy.rotation.set(0, (deg * Math.PI) / 180, 0)
+        dummy.scale.set(1, Math.max(0.05, to - from), 1)
+        dummy.updateMatrix()
+        tp.setMatrixAt(i, dummy.matrix)
+      })
+      dummy.scale.set(1, 1, 1)
+      tp.count = built.posts.length
+      tp.instanceMatrix.needsUpdate = true
+      tp.computeBoundingSphere()
+    }
+  }, [built, sel, deg])
 
   // drawing a new field, and moving a selected one
   const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
@@ -129,6 +168,12 @@ export default function Lifts({ built, lifts, deg, sel, onSel, onChange, onCreat
         onPointerOut={() => (document.body.style.cursor = '')}
       >
         <meshStandardMaterial roughness={0.92} />
+      </instancedMesh>
+      <instancedMesh key={'b' + Math.max(1, built.beams.length)} ref={beams} args={[TIMBER, null, Math.max(1, built.beams.length)]} castShadow userData={{ layer: 'Lifted plates - timber grid' }} raycast={() => null}>
+        <meshStandardMaterial color="#cfa978" roughness={0.75} />
+      </instancedMesh>
+      <instancedMesh key={'t' + Math.max(1, built.posts.length)} ref={tposts} args={[POST, null, Math.max(1, built.posts.length)]} castShadow userData={{ layer: 'Lifted plates - timber posts' }} raycast={() => null}>
+        <meshStandardMaterial color="#c49b68" roughness={0.75} />
       </instancedMesh>
       <instancedMesh key={'s' + ns} ref={posts} args={[SUPPORT, null, ns]} castShadow userData={{ layer: 'Lifted plates - steel supports' }} raycast={() => null}>
         <meshStandardMaterial color="#45494d" metalness={0.6} roughness={0.4} />

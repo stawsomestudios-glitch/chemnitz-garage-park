@@ -12,6 +12,7 @@ import Ribbon from './Ribbon.jsx'
 import Park from './Park.jsx'
 import Plaza from './Plaza.jsx'
 import Lifts from './Lifts.jsx'
+import Roofs from './Roofs.jsx'
 import { ground, seatBuilding, terrainMesh, topoOn } from './terrain.js'
 import { COBALT, RIBBON_KINDS, buildRibbon, passages } from './ribbon.js'
 
@@ -186,7 +187,7 @@ function Passages({ pass, look, topo }) {
   ))
 }
 
-function Garages({ title, block, picked, onPick, connecting, pass, look, topo }) {
+function Garages({ title, block, picked, onPick, connecting, pass, look, topo, roofs = {} }) {
   const body = useRef()
   const door = useRef()
   const glass = useRef()
@@ -197,11 +198,12 @@ function Garages({ title, block, picked, onPick, connecting, pass, look, topo })
     const car = []
     GARAGES.forEach((g, i) => {
       if (pass?.ids.has(g.id)) return // cleared for the ribbon, drawn as a shell instead
+      if (roofs[g.id] && roofs[g.id] !== 'closed') return // roof opened: drawn by Roofs
       const t = TITLE[title[g.id]]
       ;(t?.clear ? clear : t?.car ? car : solid).push(i)
     })
     return { solid, clear, car }
-  }, [title, pass])
+  }, [title, pass, roofs])
   useLayoutEffect(() => {
     const put = (mesh, list, fn) => {
       list.forEach((i, k) => {
@@ -475,7 +477,7 @@ function Wand({ wand, onWand }) {
   )
 }
 
-export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings }) {
+export default function Scene({ site, title, block, picked, onPick, onClear, labels, view, items, onSelectItem, onMoveItem, onDropKind, snap, api, connect, onGrip, onTarget, ribbon, chosen, onPickPiece, look, drawn = [], active = 'main', wand, onWand, show, glabel = {}, onEditLabel, topo = 'flat', ortho = false, section = null, locked, layerName, park, parkBuilt, parkEdit, parkSel, onParkSel, onPark, placing, onPlace, onPickPark, plaza, plazaBuilt, plazaEdit, onPlaza, lifts, liftsBuilt, liftDraw, liftSel, onLiftSel, onLifts, onLiftCreate, buildings, roofs = {}, roofColour = '#c0392b' }) {
   const built = useMemo(() => (ribbon.on ? buildRibbon(ribbon, undefined, ground) : null), [ribbon, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // the ribbons you drew with the magic wand, each along its own line
   const builtDrawn = useMemo(() => drawn.map((d) => ({ d, built: buildRibbon(d, d.route, ground) })), [drawn, topo]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -530,7 +532,8 @@ export default function Scene({ site, title, block, picked, onPick, onClear, lab
           shadow-normalBias={0.05}
         />
         <Context site={site} look={look} topo={topo} />
-        <Garages title={title} block={block} picked={picked} onPick={onPick} connecting={passive} pass={pass} look={look} topo={topo} />
+        <Garages title={title} block={block} picked={picked} onPick={onPick} connecting={passive} pass={pass} look={look} topo={topo} roofs={roofs} />
+        <Roofs roofs={roofs} title={title} picked={picked} onPick={onPick} connecting={passive} look={look} colour={roofColour} topo={topo} />
         {pass && <Passages pass={pass} look={look} topo={topo} />}
         {built && <Ribbon built={built} rib={ribbon} chosen={active === 'main' ? chosen : []} onPickPiece={(i, add) => onPickPiece(i, add, 'main')} connecting={passive} />}
         {builtDrawn.map(({ d, built: b }) => (
