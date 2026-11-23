@@ -7,7 +7,7 @@ import { MAP_STYLES, MAP_STYLE_IDS } from './mapStyles.js'
 import { TOPO_MODES, ground, setTerrain, setTopo } from './terrain.js'
 import { DEFAULT_PARK, buildPark, cleanPark, cutOutlines, cutRing, newParkId, prepBuildings, ringArea, roofAt } from './park.js'
 import { DEFAULT_PLAZA, buildPlaza, cleanPlaza } from './plaza.js'
-import { DEFAULT_LIFTS, PLATE, buildLifts, cleanLifts } from './lifts.js'
+import { PLATE, buildLifts, cleanLifts } from './lifts.js'
 import { ROOF_MODES } from './Roofs.jsx'
 import { DEFAULT_TF, TREFOIL, cleanTrefoil } from './trefoil.js'
 import { sectionGeom, sideName } from './Views.jsx'
@@ -38,9 +38,11 @@ const PLAZA_ITEMS = [
   ...[[-46, 12], [-47, 27], [27, 71], [17, 86]].map(([x, y], i) => ({ id: 'ps' + i, kind: 'trafficsign', x, y, z: 0, rot: 0, layer: 'lp', label: i === 0 ? 'Shared space · 10 km/h · pedestrians first' : undefined })),
 ].map((it) => (it.label ? it : (({ label, ...r }) => r)(it)))
 // Opened garage roofs to start with: rows R2 and R3 as a sawtooth of tilted plates, R4 frame only, R5 removed
-const DEFAULT_ROOFS = Object.fromEntries(GARAGES.filter((g) => ['R2', 'R3', 'R4', 'R5'].includes(g.row)).map((g) => [g.id, g.row === 'R4' ? 'frame' : g.row === 'R5' ? 'open' : 'tilt']))
+// no opened garage roofs and no lifted plate fields to start with (they were taken out; the tools to make them stay)
+const DEFAULT_ROOFS = {}
+const NO_LIFTS = []
 // In this copy there is no ribbon (it is kept off) and no modules: the elevated park takes their place.
-const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: DEFAULT_PARK, plaza: DEFAULT_PLAZA, lifts: DEFAULT_LIFTS, roofs: DEFAULT_ROOFS, roofColour: '#c0392b', ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
+const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: DEFAULT_PARK, plaza: DEFAULT_PLAZA, lifts: NO_LIFTS, roofs: DEFAULT_ROOFS, cleared: true, roofColour: '#c0392b', ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
 // the map layers you can recolour, in the order the Map section lists them
 const MAP_LAYERS = [
   ['bg', 'Sky / background'], ['ground', 'Ground'], ['green', 'Green areas'], ['parking', 'Parking'], ['site', 'Garage yard'],
@@ -118,8 +120,10 @@ function clean(s) {
       ...(v.section && Number.isFinite(+v.section.angle) ? { section: { angle: +v.section.angle, offset: +v.section.offset || 0, flip: !!v.section.flip } } : {}),
     }))
   return { title, block, items, // a plan saved before the plate grid existed: its deck becomes reused GDR plates once
-    park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, lifts: s.lifts ? cleanLifts(s.lifts) : DEFAULT_LIFTS,
-    roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && ['tilt', 'frame', 'open', 'gone'].includes(m))) : DEFAULT_ROOFS,
+    park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, // plans saved before the fields and red roofs were taken out lose them once (cleared)
+    lifts: s.lifts && s.cleared ? cleanLifts(s.lifts) : NO_LIFTS,
+    cleared: true,
+    roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && (s.cleared ? ['tilt', 'frame', 'open', 'gone'] : ['gone']).includes(m))) : DEFAULT_ROOFS,
     roofColour: parseColour(s.roofColour) ?? '#c0392b',
     bparts: Object.fromEntries(Object.entries(s.bparts ?? {}).filter(([i, ps]) => Number.isInteger(+i) && Array.isArray(ps) && ps.length).map(([i, ps]) => [i, ps.filter((q) => q && Array.isArray(q.p) && q.p.length >= 3).map((q) => ({ p: q.p.map(([x, y]) => [+x, +y]), ...(+q.dx ? { dx: +q.dx } : {}), ...(+q.dy ? { dy: +q.dy } : {}), ...(q.gone ? { gone: true } : {}) }))])),
     bcut: Object.fromEntries(Object.entries(s.bcut ?? {}).filter(([i, n]) => Number.isInteger(+i) && Number.isInteger(+n) && +n > 0).map(([i, n]) => [i, +n])), ribbon: { ...cleanRibbon(s.ribbon), on: false }, map: cleanMap(s.map), glabel, drawn: [], heading, views, layers: cleanLayers(s.layers) }
@@ -494,10 +498,10 @@ export default function App() {
   const setPlaza = (fn, key) => setPlan((p) => ({ ...p, plaza: fn(p.plaza ?? DEFAULT_PLAZA) }), key)
   const plazaBuilt = useMemo(() => (siteAdj && plaza.on ? buildPlaza(plaza, siteAdj) : null), [plaza, siteAdj, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   // ----- lifted roofs and areas of reused GDR plates -----
-  const lifts = plan.lifts ?? DEFAULT_LIFTS
+  const lifts = plan.lifts ?? NO_LIFTS
   const [liftDraw, setLiftDraw] = useState(false)
   const [liftSel, setLiftSel] = useState(null)
-  const setLifts = (fn, key) => setPlan((p) => ({ ...p, lifts: fn(p.lifts ?? DEFAULT_LIFTS) }), key)
+  const setLifts = (fn, key) => setPlan((p) => ({ ...p, lifts: fn(p.lifts ?? NO_LIFTS) }), key)
   const liftsBuilt = useMemo(() => (site ? buildLifts(lifts, park.netAngle, parkBuildings) : null), [lifts, park.netAngle, parkBuildings, topo]) // eslint-disable-line react-hooks/exhaustive-deps
   const createLift = (r) => {
     if (r.nu * r.nv < 2) return setNote('Drag over the model to draw a field of plates (at least two plates).')
@@ -1777,7 +1781,7 @@ export default function App() {
             </p>
             <div className="actions">
               <button className={liftDraw ? 'primary on' : 'primary'} onClick={() => { setLiftDraw(!liftDraw); setPlacing(null) }}>{liftDraw ? '✓ Done drawing' : '▦ Draw a field of plates'}</button>
-              <button onClick={() => { setLifts(() => DEFAULT_LIFTS); setLiftSel(null) }} title="Back to the first three fields (Undo brings yours back)">Start again</button>
+              <button onClick={() => { setLifts(() => NO_LIFTS); setLiftSel(null) }} title="Remove all fields (Undo brings yours back)">Remove all</button>
             </div>
             {lifts.length > 0 && (
               <ol className="lift-list">
