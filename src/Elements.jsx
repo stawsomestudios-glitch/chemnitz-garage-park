@@ -7,6 +7,25 @@ import { TITLE } from './titles.js'
 import { COBALT, RIBBON_KINDS, buildModule } from './ribbon.js'
 import { lookOf, makeMaterial } from './materials.js'
 import { ground } from './terrain.js'
+import { buildTrefoil } from './trefoil.js'
+
+// The tree canopy: its roof and stem, made again whenever one of its sizes changes.
+function Trefoil({ it, picked }) {
+  const key = JSON.stringify(it.tf ?? {})
+  const geo = useMemo(() => buildTrefoil(it.tf), [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { geo.roof.dispose(); geo.stem.dispose() }, [geo])
+  const c = picked ? '#' + new THREE.Color(colourOf(it)).lerp(new THREE.Color('#ff7a1a'), 0.45).getHexString() : colourOf(it)
+  return (
+    <group>
+      <mesh geometry={geo.roof} castShadow receiveShadow userData={{ stack: true, item: it.id, name: 'Tree canopy roof' }}>
+        <meshStandardMaterial color={c} roughness={0.55} />
+      </mesh>
+      <mesh geometry={geo.stem} castShadow receiveShadow userData={{ item: it.id, name: 'Tree canopy stem' }}>
+        <meshStandardMaterial color={c} roughness={0.6} />
+      </mesh>
+    </group>
+  )
+}
 
 // A single blue module: one straight piece of the ribbon.
 function Module({ it, picked }) {
@@ -167,6 +186,8 @@ export function Elements({ items, picked, onSelect, onMove, snap, connecting, lo
       >
         {it.kind === 'rmod' ? (
           <Module it={it} picked={picked.has(it.id)} />
+        ) : it.kind === 'trefoil' ? (
+          <Trefoil it={it} picked={picked.has(it.id)} />
         ) : (
           /* stretched to the size you set */
           <group scale={[size.w / k.w, size.h / k.h, size.d / k.d]}>

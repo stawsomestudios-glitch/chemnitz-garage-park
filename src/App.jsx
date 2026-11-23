@@ -9,6 +9,7 @@ import { DEFAULT_PARK, buildPark, cleanPark, cutOutlines, cutRing, newParkId, pr
 import { DEFAULT_PLAZA, buildPlaza, cleanPlaza } from './plaza.js'
 import { DEFAULT_LIFTS, PLATE, buildLifts, cleanLifts } from './lifts.js'
 import { ROOF_MODES } from './Roofs.jsx'
+import { DEFAULT_TF, TREFOIL, cleanTrefoil } from './trefoil.js'
 import { sectionGeom, sideName } from './Views.jsx'
 import ColourField, { parseColour } from './ColourField.jsx'
 import { colourOf } from './Elements.jsx'
@@ -88,6 +89,7 @@ function clean(s) {
       for (const k of ['sw', 'sd', 'sh']) if (+it[k] > 0) out[k] = +it[k]
       if (it.col && parseColour(it.col)) out.col = parseColour(it.col)
       if (it.label) out.label = String(it.label).slice(0, 60)
+      if (it.kind === 'trefoil') out.tf = cleanTrefoil(it.tf)
       if (it.layer) out.layer = String(it.layer).slice(0, 60)
       if (it.kind === 'rmod') {
         const rk = RIBBON_KINDS[it.rk] && !RIBBON_KINDS[it.rk].gap ? it.rk : 'bench'
@@ -1485,7 +1487,7 @@ export default function App() {
                   ? [...new Set(selItems.map((it) => (it.kind === 'rmod' ? `${RIBBON_KINDS[it.rk].name} module` : KINDS[it.kind].name)))].join(', ') + '. Drag it in the model to move it.'
                   : 'Click a garage or its title. Shift-click to add more, or tick the box below.'}
             </p>
-            {selItems.length > 0 && !selItems.some((it) => it.kind === 'rmod') && (
+            {selItems.length > 0 && !selItems.some((it) => it.kind === 'rmod' || it.kind === 'trefoil') && (
               <div className="sizes">
                 {[['sw', 'Width', 'w'], ['sd', 'Length', 'd'], ['sh', 'Height', 'h']].map(([key, l, dk]) => (
                   <label key={key}>
@@ -1582,12 +1584,36 @@ export default function App() {
                 <button onClick={() => rotate(15)}>Turn 15°</button>
                 <button onClick={duplicate}>Copy</button>
                 <button onClick={() => changeItems((it) => ({ ...it, z: 0 }))}>To ground</button>
+                {selItems.every((it) => it.kind === 'trefoil') && (
+                  <button onClick={() => changeItems((it) => ({ ...it, tf: { ...DEFAULT_TF } }))} title="All its sizes back to the first ones">
+                    Canopy back to start
+                  </button>
+                )}
                 {selItems.every((it) => it.kind === 'stall' || it.kind === 'stallopen') && (
                   <button onClick={() => { const shade = !selItems.every((it) => it.kind === 'stall'); changeItems((it) => (({ col, ...r }) => ({ ...r, kind: shade ? 'stall' : 'stallopen' }))(it)) }} title="Give the stall its own shade roof, or take it off">
                     {selItems.every((it) => it.kind === 'stall') ? 'Shade off' : 'Shade on'}
                   </button>
                 )}
                 <button className="danger" onClick={removeItems}>Delete</button>
+              </div>
+            )}
+            {selItems.length > 0 && selItems.every((it) => it.kind === 'trefoil') && (
+              <div className="park-sel">
+                <b>Tree canopy{selItems.length > 1 ? `s (${selItems.length})` : ''}</b>
+                <p className="muted small">A roof around three circles, with a hole in the middle, on a branching stem. Every slider changes {selItems.length > 1 ? 'all the picked canopies' : 'it'} at once; drag it in the model to move it, Turn 15° to turn it.</p>
+                {Object.entries(TREFOIL).map(([k, v]) => (
+                  <ParkVal
+                    key={k}
+                    label={v.label}
+                    title={v.title}
+                    min={v.min}
+                    max={v.max}
+                    step={v.step}
+                    unit={v.unit}
+                    value={cleanTrefoil(selItems[0].tf)[k]}
+                    onChange={(n) => changeItems((it) => ({ ...it, tf: { ...cleanTrefoil(it.tf), [k]: n } }), 'tf:' + k)}
+                  />
+                ))}
               </div>
             )}
             <label className="check">

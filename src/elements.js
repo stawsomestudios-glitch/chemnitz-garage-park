@@ -1,4 +1,5 @@
 import { GARAGES } from './garages.js'
+import { trefoilSize } from './trefoil.js'
 import { COBALT, DEFAULT_WIDTH, RIBBON_KINDS, pieceTop, pieceWidth } from './ribbon.js'
 
 // The elements you can drag into the model. All sizes in metres.
@@ -49,6 +50,8 @@ export const KINDS = {
       box([0.4, 0.85, -0.7], [0.6, 0.18, 0.4], '#e09a3e'),
     ],
   },
+  // a roof around three circles with a hole in the middle, on a branching stem (shape in src/trefoil.js, sizes in it.tf)
+  trefoil: { name: 'Tree canopy', size: 'about 14 × 14, 6 high', w: 14, d: 14, colour: '#2f2f30', parts: () => [] },
   kiosk: {
     name: 'Kiosk', size: '2.5 × 2.5', w: 2.5, d: 2.5, colour: '#ecebe6',
     parts: (c) => [box([0, 1.25, 0], [2.5, 2.5, 2.5], c, { stack: true }), box([0, 1.35, 1.26], [1.8, 0.9, 0.03], '#2c3742', { rough: 0.2 }), box([0, 2.6, 0.3], [2.9, 0.12, 3.1], '#4a4d52')],
@@ -232,14 +235,14 @@ export const KINDS = {
 
 // The groups the Add elements palette shows them in.
 export const ELEMENT_GROUPS = [
-  ['Build', ['stall', 'stallopen', 'kiosk', 'deck', 'stairs', 'ramp', 'bridge', 'bridgelegs', 'wall', 'shade', 'pergola', 'parasol']],
+  ['Build', ['trefoil', 'stall', 'stallopen', 'kiosk', 'deck', 'stairs', 'ramp', 'bridge', 'bridgelegs', 'wall', 'shade', 'pergola', 'parasol']],
   ['Transport and people', ['tram', 'tramtrack', 'tramstop', 'bus', 'car', 'person']],
   ['Landscape', ['tree', 'smalltree', 'pine', 'bush', 'hedge', 'planter', 'flowers', 'lawn', 'paving', 'pond', 'boulder']],
   ['Street furniture', ['bench', 'table', 'lamp', 'bollard', 'bikerack', 'bin']],
   ['Signs', ['streetsign', 'trafficsign', 'signpost', 'infoboard']],
 ]
 // Height of each element in metres, used for sizes, stacking and connect points.
-const HEIGHTS = { stall: 2.45, stallopen: 1.04, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 7, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
+const HEIGHTS = { trefoil: 6, stall: 2.45, stallopen: 1.04, kiosk: 2.66, module: 3, half: 3, deck: 0.3, stairs: 3, shade: 3.4, pergola: 3.08, parasol: 2.75, tree: 7, planter: 0.76, bench: 0.95, table: 0.78, wall: 2.4, lamp: 4.05, person: 1.71, car: 1.4, bridge: 1.15, bridgelegs: 3.95, ramp: 3,
   tram: 4.03, tramtrack: 0.09, tramstop: 3.0, bus: 3.1, pine: 7, smalltree: 4, bush: 1.2, hedge: 1.2, flowers: 0.57, lawn: 0.04, paving: 0.04, pond: 0.04, boulder: 0.7,
   bollard: 0.9, bikerack: 0.88, bin: 0.95, streetsign: 2.8, trafficsign: 2.5, signpost: 2.6, infoboard: 2.0 }
 for (const k in KINDS) KINDS[k].h = HEIGHTS[k]
@@ -248,6 +251,7 @@ export const KIND_IDS = Object.keys(KINDS).filter((k) => !KINDS[k].hidden)
 // The real size of an element: what you typed in, or its normal size.
 export function dims(it) {
   if (it.kind === 'rmod') return { w: pieceWidth(it.rk, it.bw, it.w), d: it.len, h: pieceTop(it.rk, it.len, it.h) }
+  if (it.kind === 'trefoil') return trefoilSize(it.tf)
   const k = KINDS[it.kind]
   return { w: it.sw ?? k.w, d: it.sd ?? k.d, h: it.sh ?? k.h }
 }
