@@ -51,7 +51,7 @@ export const KINDS = {
     ],
   },
   // a roof around three circles with a hole in the middle, on a branching stem (shape in src/trefoil.js, sizes in it.tf)
-  trefoil: { name: 'Tree canopy', size: 'about 14 × 14, 6 high', w: 14, d: 14, colour: '#2f2f30', parts: () => [] },
+  trefoil: { name: 'Blob canopy', size: 'about 14 × 14, 5.5 high', w: 14, d: 14, colour: '#2f2f30', parts: () => [] },
   kiosk: {
     name: 'Kiosk', size: '2.5 × 2.5', w: 2.5, d: 2.5, colour: '#ecebe6',
     parts: (c) => [box([0, 1.25, 0], [2.5, 2.5, 2.5], c, { stack: true }), box([0, 1.35, 1.26], [1.8, 0.9, 0.03], '#2c3742', { rough: 0.2 }), box([0, 2.6, 0.3], [2.9, 0.12, 3.1], '#4a4d52')],

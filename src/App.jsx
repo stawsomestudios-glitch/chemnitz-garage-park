@@ -9,7 +9,7 @@ import { DEFAULT_PARK, buildPark, cleanPark, cutOutlines, cutRing, newParkId, pr
 import { DEFAULT_PLAZA, buildPlaza, cleanPlaza } from './plaza.js'
 import { PLATE, buildLifts, cleanLifts } from './lifts.js'
 import { ROOF_MODES } from './Roofs.jsx'
-import { DEFAULT_TF, TREFOIL, cleanTrefoil } from './trefoil.js'
+import { DEFAULT_TF, FOR_STYLE, TREFOIL, cleanTrefoil, points as tfPoints } from './trefoil.js'
 import { sectionGeom, sideName } from './Views.jsx'
 import ColourField, { parseColour } from './ColourField.jsx'
 import { colourOf } from './Elements.jsx'
@@ -42,7 +42,7 @@ const PLAZA_ITEMS = [
 const DEFAULT_ROOFS = {}
 const NO_LIFTS = []
 // In this copy there is no ribbon (it is kept off) and no modules: the elevated park takes their place.
-const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: DEFAULT_PARK, plaza: DEFAULT_PLAZA, lifts: NO_LIFTS, roofs: DEFAULT_ROOFS, cleared: true, roofColour: '#c0392b', ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
+const EMPTY = { title: {}, block: {}, items: [...STALLS, ...PLAZA_ITEMS], park: { ...DEFAULT_PARK, on: false }, parkOff: true, plaza: DEFAULT_PLAZA, lifts: NO_LIFTS, roofs: DEFAULT_ROOFS, cleared: true, roofColour: '#c0392b', ribbon: { ...DEFAULT_RIBBON, on: false }, map: DEFAULT_MAP, glabel: {}, drawn: [], heading: { title: '', sub: '' }, views: [], layers: [...DEFAULT_LAYERS, { id: 'lm', name: 'Market under the park', on: true, locked: false }, { id: 'lp', name: 'Plaza market and furniture', on: true, locked: false }] }
 // the map layers you can recolour, in the order the Map section lists them
 const MAP_LAYERS = [
   ['bg', 'Sky / background'], ['ground', 'Ground'], ['green', 'Green areas'], ['parking', 'Parking'], ['site', 'Garage yard'],
@@ -120,8 +120,9 @@ function clean(s) {
       ...(v.section && Number.isFinite(+v.section.angle) ? { section: { angle: +v.section.angle, offset: +v.section.offset || 0, flip: !!v.section.flip } } : {}),
     }))
   return { title, block, items, // a plan saved before the plate grid existed: its deck becomes reused GDR plates once
-    park: s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK, plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, // plans saved before the fields and red roofs were taken out lose them once (cleared)
+    park: ((pk) => (s.parkOff ? pk : { ...pk, on: false }))(s.park ? cleanPark(s.lifts ? s.park : { ...s.park, mat: 'gdr', net: 1.2, columns: 7.2, col: undefined }) : DEFAULT_PARK), plaza: s.plaza ? cleanPlaza(s.plaza) : DEFAULT_PLAZA, // plans saved before the fields and red roofs were taken out lose them once (cleared)
     lifts: s.lifts && s.cleared ? cleanLifts(s.lifts) : NO_LIFTS,
+    parkOff: true, // the big park deck was switched off once (blob canopies took its place); "Show the park" brings it back
     cleared: true,
     roofs: s.roofs ? Object.fromEntries(Object.entries(s.roofs).filter(([id, m]) => ALL.includes(id) && (s.cleared ? ['tilt', 'frame', 'open', 'gone'] : ['gone']).includes(m))) : DEFAULT_ROOFS,
     roofColour: parseColour(s.roofColour) ?? '#c0392b',
@@ -1603,9 +1604,22 @@ export default function App() {
             )}
             {selItems.length > 0 && selItems.every((it) => it.kind === 'trefoil') && (
               <div className="park-sel">
-                <b>Tree canopy{selItems.length > 1 ? `s (${selItems.length})` : ''}</b>
-                <p className="muted small">A roof around three circles, with a hole in the middle, on a branching stem. Every slider changes {selItems.length > 1 ? 'all the picked canopies' : 'it'} at once; drag it in the model to move it, Turn 15° to turn it.</p>
-                {Object.entries(TREFOIL).map(([k, v]) => (
+                <b>Blob canopy{selItems.length > 1 ? `s (${selItems.length})` : ''}</b>
+                <p className="muted small">
+                  A thin roof whose edge is made of circles; each orange point in the model is the centre of one circle ({tfPoints(selItems[0].tf).length} now). Every slider changes {selItems.length > 1 ? 'all the picked canopies' : 'it'} at once; drag it in the model to move it, Turn 15° to turn it.
+                </p>
+                {Object.entries(TREFOIL).filter(([k]) => FOR_STYLE[k] == null || FOR_STYLE[k] === cleanTrefoil(selItems[0].tf).style).map(([k, v]) => v.choices ? (
+                  <div key={k} className="snaprow">
+                    <span>{v.label}</span>
+                    <div className="seg-group small-seg" role="group" aria-label={v.label}>
+                      {v.choices.map(([c, l]) => (
+                        <button key={c} className={cleanTrefoil(selItems[0].tf)[k] === c ? 'on' : ''} title={v.title} onClick={() => changeItems((it) => ({ ...it, tf: { ...cleanTrefoil(it.tf), [k]: c } }))}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                   <ParkVal
                     key={k}
                     label={v.label}

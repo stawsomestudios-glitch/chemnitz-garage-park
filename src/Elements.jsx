@@ -7,7 +7,8 @@ import { TITLE } from './titles.js'
 import { COBALT, RIBBON_KINDS, buildModule } from './ribbon.js'
 import { lookOf, makeMaterial } from './materials.js'
 import { ground } from './terrain.js'
-import { buildTrefoil } from './trefoil.js'
+import { buildTrefoil, cleanTrefoil as cleanTF } from './trefoil.js'
+import { Line } from '@react-three/drei'
 
 // The tree canopy: its roof and stem, made again whenever one of its sizes changes.
 function Trefoil({ it, picked }) {
@@ -17,12 +18,26 @@ function Trefoil({ it, picked }) {
   const c = picked ? '#' + new THREE.Color(colourOf(it)).lerp(new THREE.Color('#ff7a1a'), 0.45).getHexString() : colourOf(it)
   return (
     <group>
-      <mesh geometry={geo.roof} castShadow receiveShadow userData={{ stack: true, item: it.id, name: 'Tree canopy roof' }}>
+      <mesh geometry={geo.roof} castShadow receiveShadow userData={{ stack: true, item: it.id, name: 'Blob canopy roof' }}>
         <meshStandardMaterial color={c} roughness={0.55} />
       </mesh>
-      <mesh geometry={geo.stem} castShadow receiveShadow userData={{ item: it.id, name: 'Tree canopy stem' }}>
-        <meshStandardMaterial color={c} roughness={0.6} />
+      <mesh geometry={geo.stem} castShadow receiveShadow userData={{ item: it.id, name: 'Blob canopy stems' }}>
+        <meshStandardMaterial color={c} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
+      {picked && (
+        // the centre of each circle, and the circle, on top of the roof
+        <group position={[0, cleanTF(it.tf).h + 0.08, 0]} userData={{ noExport: true }}>
+          {geo.lobes.map(([x, y], i) => (
+            <group key={i}>
+              <mesh position={[x, 0.15, -y]} raycast={() => null}>
+                <sphereGeometry args={[0.35, 12, 8]} />
+                <meshBasicMaterial color="#ff7a1a" depthTest={false} />
+              </mesh>
+              <Line points={Array.from({ length: 65 }, (_, k) => [x + Math.cos((k / 64) * PI * 2) * geo.R, 0.05, -(y + Math.sin((k / 64) * PI * 2) * geo.R)])} color="#ff7a1a" lineWidth={1.5} dashed dashSize={0.4} gapSize={0.3} depthTest={false} />
+            </group>
+          ))}
+        </group>
+      )}
     </group>
   )
 }
